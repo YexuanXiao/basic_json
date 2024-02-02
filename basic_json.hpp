@@ -1,64 +1,21 @@
-#include <cstddef>
-#include <cstdint>
-#include <optional>
-#include <utility>
 #include <string>
 #include <map>
 #include <memory>
-#include <variant>
 #include <vector>
-#include <stdfloat>
-#include <type_traits>
-#include <limits>
-
 // https://www.rfc-editor.org/rfc/rfc8259
 
 namespace bizwen
 {
 
-    template <template <typename...> class Map, template <typename...> class Array, template <typename...> class Allocator>
-    concept flat_map_pattern = requires { typename Map<int, int, std::less<int>, Array<int, Allocator<int>>, Array<int, Allocator<int>>>; };
-    template <template <typename...> class Map, template <typename...> class Allocator>
-    concept map_pattern = requires { typename Map<int, int, std::less<int>, Allocator<std::pair<const int, int>>>; };
-
-#if __STDCPP_FLOAT64_T__ != 1
-#define BIZWEN_JSON_NUMBER_TYPE double
-#else
-#define BIZWEN_JSON_NUMBER_TYPE std::float64_t
-#endif
-
-    // clang-format off
-    template <class String = std::string,
-        class Number = std::conditional_t<std::numeric_limits<double>::is_iec559, double, BIZWEN_JSON_NUMBER_TYPE>,
-        template <typename...> class Object = std::map,
-        template <typename...> class Array = std::vector,
-        class Boolean = bool,
-        class Int64 = long long,
-        class UInt64 = unsigned long long,
-        template <typename...> class Allocator = std::allocator>
-    // clang-format on
-    class basic_json
+    template <typename Boolean = bool, typename Number = double, typename Integer = long long, typename UInteger = unsigned long long>
+    struct json_handle
     {
-        static auto object_type_helper()
-        {
-            if constexpr (flat_map_pattern<Object, Array, Allocator>)
-                return Object<String, basic_json, std::less<>, Allocator<std::pair<String, basic_json>>>();
-            else if constexpr (map_pattern<Object, Allocator>)
-                return Object<String, basic_json, std::less<>, Array<String, Allocator<String>>, Array<basic_json, Allocator<String>>>();
-            else
-                static_assert(false);
-        }
-
-        using string_t = String;
-        using number_t = Number;
-        using object_t = decltype(object_type_helper());
-        using array_t = Array<basic_json, Allocator<basic_json>>;
         using boolean_t = Boolean;
-        using int64_t = Int64;
-        using uint64_t = UInt64;
-        using null_t = decltype(nullptr);
+        using number_t = Number;
+        using integer_t = Integer;
+        using uinteger_t = UInteger;
 
-        enum class value_t : unsigned char
+        enum class kind_t : unsigned char
         {
             null,
             boolean,
@@ -66,117 +23,105 @@ namespace bizwen
             string,
             array,
             object,
-            int64,
-            uint64
+            integer,
+            uinteger
         };
 
         union storage_type_
         {
-            null_t null_;
+            decltype(nullptr) null_;
             boolean_t bool_;
             number_t num_;
-            string_t* str_;
-            array_t* arr_;
-            object_t* obj_;
-            int64_t int64_;
-            uint64_t uint64_;
-
-            void allocate(value_t v_t)
-            {
-                using enum value_t;
-                switch (v_t)
-                {
-                case null: {
-                    null_ = decltype(null_){};
-                    break;
-                }
-                case boolean: {
-                    bool_ = decltype(bool_){};
-                    break;
-                }
-                case number: {
-                    num_ = decltype(num_){};
-                    break;
-                }
-                case string: {
-                    str_ = new decltype(str_){};
-                    break;
-                }
-                case array: {
-                    arr_ = new decltype(arr_){};
-                    break;
-                }
-                case object: {
-                    obj_ = new decltype(obj_){};
-                    break;
-                }
-                case int64: {
-                    int64_ = decltype(int64_){};
-                    break;
-                }
-                case uint64: {
-                    uint64_ = decltype(uint64_){};
-                    break;
-                }
-                }
-            }
-
-            void dealloc(value_t v_t)
-            {
-                using enum value_t;
-                switch (v_t)
-                {
-                case string: {
-                    delete (str_);
-                    break;
-                }
-                case array: {
-                    delete (arr_);
-                    break;
-                }
-                case object: {
-                    delete (obj_);
-                    break;
-                }
-                }
-            }
+            integer_t int_;
+            uinteger_t uint_;
+            void* ptr_;
         };
 
-        storage_type_ stor_{};
+        storage_type_ stor_;
+        kind_t kind_;
     };
-}
 
-struct json_handle
-{
-    void* ptr_;
-};
-
-template <typename String, typename Array, typename Map, bool has_integer, bool has_uinteger, typename Allocator>
-class basic_json
-{
-    enum class value_t : unsigned char
+    template <typename Handle = json_handle<>, typename String = std::string, typename Array = std::vector<json_handle<>>, typename Map = std::map<std::string, json_handle<>>, typename Allocator = std::allocator<json_handle<>>, bool has_integer = true, bool has_uinteger = true>
+    class basic_json
     {
-        null,
-        boolean,
-        number,
-        string,
-        array,
-        object,
-        int64,
-        uint64
-    };
-
+        using handle_t = Handle;
+        using number_t = handle_t::number_t;
+        using boolean_t = handle_t::boolean_t;
+        using integer_t = handle_t::integer_t;
+        using uinteger_t = handle_t::uinteger_t;
+        using null_t = decltype(nullptr);
         using string_t = String;
-        using number_t = double;
         using object_t = Map;
         using array_t = Array;
-        using boolean_t = bool;
-        using int64_t = std::int64_t;
-        using uint64_t = int64_t;
-        using null_t = std::nullopt_t;
-    
-    using erased_type = std::variant<std::nullopt_t, bool, double, String, Array, Map, basic_json, std::int64_t, std::uint64_t>;
-    void* storptr_;
-};
+        using kind_t = handle_t::kind_t;
 
-using json = basic_json<std::string, std::vector<json_handle>, std::map<std::string, json_handle>, true, true, std::allocator<json_handle>>;
+        handle_t handle_;
+
+        void allocate(kind_t k)
+        {
+            handle_.kind_ = k;
+            auto&& stor_ = handle_.stor_;
+
+            switch (k)
+            {
+            case kind_t::null: {
+                stor_.null_ = nullptr;
+                break;
+            }
+            case kind_t::boolean: {
+                stor_.bool_ = boolean_t{};
+                break;
+            }
+            case kind_t::number: {
+                stor_.num_ = number_t{};
+                break;
+            }
+            case kind_t::string: {
+                stor_.str_ = new string_t{};
+                break;
+            }
+            case kind_t::array: {
+                stor_.arr_ = new array_t{};
+                break;
+            }
+            case kind_t::object: {
+                stor_.obj_ = new object_t{};
+                break;
+            }
+            case kind_t::integer: {
+                stor_.int_ = integer_t{};
+                break;
+            }
+            case kind_t::uinteger: {
+                stor_.uint_ = uinteger_t{};
+                break;
+            }
+            }
+        }
+
+        void dealloc(kind_t k)
+        {
+            handle_.kind_ = k;
+            auto&& stor_ = handle_.stor_;
+
+            switch (k)
+            {
+            case kind_t::string: {
+                delete (stor_.ptr_);
+                break;
+            }
+            case kind_t::array: {
+                delete (stor_.ptr_);
+                break;
+            }
+            case kind_t::object: {
+                delete (stor_.ptr_);
+                break;
+            }
+            }
+        }
+    };
+
+    using json = basic_json<>;
+
+}
