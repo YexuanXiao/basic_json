@@ -65,8 +65,8 @@ namespace bizwen
 
 		constexpr json_node(json_node&& rhs) noexcept
 		{
-            stor_ = rhs.stor_;
-            kind_ = rhs.kind_;
+			stor_ = rhs.stor_;
+			kind_ = rhs.kind_;
 		}
 	};
 
@@ -146,13 +146,28 @@ namespace bizwen
 		[[nodiscard]] constexpr bool boolean() const noexcept
 		{
 			auto k = kind();
+
 			return k == kind_t::true_value || kind_t::false_value;
 		}
 
 		[[nodiscard]] constexpr bool number() const noexcept
 		{
 			auto k = kind();
-			return k == kind_t::number || k == kind_t::integer || k == kind_t::uinteger;
+
+			bool is_integer{};
+			bool is_uinteger{};
+
+			if constexpr (has_integer)
+			{
+				is_integer = k == kind_t::integer;
+			}
+
+			if constexpr (has_uinteger)
+			{
+				is_uinteger = k == kind_t::uinteger;
+			}
+
+			return k == kind_t::number || is_integer || is_uinteger;
 		}
 
 		[[nodiscard]] constexpr bool object() const noexcept
@@ -213,6 +228,7 @@ namespace bizwen
 			// todo: replace all asserts as exceptions
 			assert(boolean());
 			auto k = kind();
+
 			return k == kind_t::true_value ? 1 : 0;
 		}
 
@@ -228,30 +244,34 @@ namespace bizwen
 			else if (k == kind_t::uinteger)
 				return s.uint_;
 			else
-				assert(number());
+				assert(number()), std::unreachable();
 		}
 
 		constexpr explicit operator nulljson_t() const noexcept
 		{
 			assert(null());
+
 			return nulljson;
 		}
 
 		constexpr explicit operator const string_t&() const& noexcept
 		{
 			assert(string());
+
 			return *(json_->stor_.str_);
 		}
 
 		constexpr explicit operator const array_t&() const& noexcept
 		{
 			assert(array());
+
 			return *(json_->stor_.arr_);
 		}
 
 		constexpr explicit operator const object_t&() const& noexcept
 		{
 			assert(object());
+
 			return *(json_->stor_.obj_);
 		}
 
@@ -259,6 +279,7 @@ namespace bizwen
 		    requires(has_integer)
 		{
 			assert(integer());
+
 			return json_->stor_.int_;
 		}
 
@@ -266,6 +287,7 @@ namespace bizwen
 		    requires(has_uinteger)
 		{
 			assert(uinteger());
+
 			return json_->stor_.uint_;
 		}
 	};
@@ -456,6 +478,7 @@ namespace bizwen
 		{
 			auto temp = node_;
 			node_ = node_t{};
+
 			return temp;
 		}
 	};
