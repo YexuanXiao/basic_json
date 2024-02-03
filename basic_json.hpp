@@ -46,7 +46,7 @@ namespace bizwen
 			object
 		};
 
-		union storage_type_
+		union stor_t_
 		{
 			void* str_;
 			void* arr_;
@@ -56,7 +56,7 @@ namespace bizwen
 			uinteger_t uint_;
 		};
 
-		storage_type_ stor_{};
+		stor_t_ stor_{};
 		kind_t kind_{};
 
 		constexpr json_node() noexcept = default;
@@ -157,7 +157,8 @@ namespace bizwen
 
 		[[nodiscard]] constexpr bool number() const noexcept
 		{
-			return kind() == kind_t::number;
+			auto k = kind();
+			return k == kind_t::number || k == kind_t::integer || k == kind_t::uinteger;
 		}
 
 		[[nodiscard]] constexpr bool object() const noexcept
@@ -223,8 +224,17 @@ namespace bizwen
 
 		constexpr explicit operator number_t() const noexcept
 		{
-			assert(number());
-			return json_->stor_.num_;
+			auto k = kind();
+			auto s = stor();
+
+			if (k == kind_t::number)
+				return s.num_;
+			else if (k == kind_t::integer)
+				return s.int_;
+			else if (k == kind_t::uinteger)
+				return s.uint_;
+			else
+				assert(number());
 		}
 
 		constexpr explicit operator nulljson_t() const noexcept
