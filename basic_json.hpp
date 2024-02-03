@@ -56,8 +56,8 @@ namespace bizwen
 			uinteger_t uint_;
 		};
 
-		stor_t_ stor_{};
-		kind_t kind_{};
+		stor_t_ stor_;
+		kind_t kind_;
 
 		constexpr json_node() noexcept = default;
 
@@ -65,16 +65,8 @@ namespace bizwen
 
 		constexpr json_node(json_node&& rhs) noexcept
 		{
-			{
-				auto temp = stor_;
-				stor_ = rhs.stor_;
-				rhs.stor_ = temp;
-			}
-			{
-				auto temp = kind_;
-				kind_ = rhs.kind_;
-				rhs.kind_ = temp;
-			}
+            stor_ = rhs.stor_;
+            kind_ = rhs.kind_;
 		}
 	};
 
@@ -103,19 +95,21 @@ namespace bizwen
 		using allocator_t = Allocator;
 		using kind_t = node_t::kind_t;
 		using json_t = basic_json<node_t, string_t, array_t, object_t, allocator_t, has_integer, has_uinteger>;
+		using char_t = string_t::value_type;
+		using size_type = decltype((sizeof(int)));
 
+		static_assert(std::integral<char_t>);
+		static_assert(std::integral<boolean_t>);
 		static_assert(std::floating_point<number_t>);
 		static_assert(std::signed_integral<integer_t>);
 		static_assert(std::unsigned_integral<uinteger_t>);
-		static_assert(std::integral<boolean_t>);
 		static_assert(std::same_as<json_node<boolean_t, number_t, integer_t, uinteger_t>, node_t>);
 		static_assert(std::random_access_iterator<typename string_t::iterator>);
 		static_assert(std::random_access_iterator<typename array_t::iterator>);
 		static_assert(std::bidirectional_iterator<typename object_t::iterator>);
-		static_assert(std::integral<typename string_t::value_type>);
 		static_assert(std::same_as<node_t, typename array_t::value_type>);
-		static_assert(std::same_as<node_t, typename object_t::mapped_type>);
 		static_assert(std::same_as<string_t, typename object_t::key_type>);
+		static_assert(std::same_as<node_t, typename object_t::mapped_type>);
 
 		json_t* json_{};
 
@@ -294,19 +288,21 @@ namespace bizwen
 		using array_t = Array;
 		using allocator_t = Allocator;
 		using kind_t = node_t::kind_t;
+		using char_t = string_t::value_type;
+		using size_type = decltype((sizeof(int)));
 
+		static_assert(std::integral<char_t>);
+		static_assert(std::integral<boolean_t>);
 		static_assert(std::floating_point<number_t>);
 		static_assert(std::signed_integral<integer_t>);
 		static_assert(std::unsigned_integral<uinteger_t>);
-		static_assert(std::integral<boolean_t>);
 		static_assert(std::same_as<json_node<boolean_t, number_t, integer_t, uinteger_t>, node_t>);
 		static_assert(std::random_access_iterator<typename string_t::iterator>);
 		static_assert(std::random_access_iterator<typename array_t::iterator>);
 		static_assert(std::bidirectional_iterator<typename object_t::iterator>);
-		static_assert(std::integral<typename string_t::value_type>);
 		static_assert(std::same_as<node_t, typename array_t::value_type>);
-		static_assert(std::same_as<node_t, typename object_t::mapped_type>);
 		static_assert(std::same_as<string_t, typename object_t::key_type>);
+		static_assert(std::same_as<node_t, typename object_t::mapped_type>);
 
 		node_t node_{};
 
@@ -375,16 +371,64 @@ namespace bizwen
 			kind(kind_t::boolean);
 		}
 
-		constexpr basic_json(string_t v) noexcept
+		constexpr basic_json(number_t v) noexcept
+		{
+			stor().num_ = v;
+			kind(kind_t::number);
+		}
+
+		constexpr basic_json(string_t v)
 		{
 			stor().str_ = new string_t(std::move(v));
 			kind(kind_t::string);
 		}
 
-		constexpr basic_json(number_t v) noexcept
+		constexpr basic_json(char_t const* begin, char_t const* end)
 		{
-			stor().num_ = v;
-			kind(kind_t::number);
+			stor().str_ = new string_t(begin, end);
+			kind(kind_t::string);
+		}
+
+		constexpr basic_json(char_t const* str, size_type count)
+		{
+			stor().str_ = new string_t(str, count);
+			kind(kind_t::string);
+		}
+
+		constexpr basic_json(char_t const* str)
+		{
+			stor().str_ = new string_t(str);
+			kind(kind_t::string);
+		}
+
+		constexpr basic_json(array_t&& arr)
+		{
+			stor().arr_ = new array_t(arr);
+			kind(kind_t::array);
+		}
+
+		constexpr basic_json(object_t&& obj)
+		{
+			stor().arr_ = new object_t(obj);
+			kind(kind_t::obj);
+		}
+
+		constexpr basic_json(string_t* str) noexcept
+		{
+			stor().str_ = str;
+			kind(kind_t::string);
+		}
+
+		constexpr basic_json(array_t* arr) noexcept
+		{
+			stor().arr_ = arr;
+			kind(kind_t::array);
+		}
+
+		constexpr basic_json(object_t* obj) noexcept
+		{
+			stor().arr_ = obj;
+			kind(kind_t::obj);
 		}
 
 		constexpr basic_json(integer_t v) noexcept
