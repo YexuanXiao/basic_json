@@ -70,46 +70,51 @@ namespace bizwen
 		}
 	};
 
-	template <typename node = json_node<>, typename String = std::string,
-	    typename Array = std::vector<json_node<>>,
-	    typename Map = std::map<std::string, json_node<>>,
-	    typename Allocator = std::allocator<json_node<>>,
+	template <typename Node = json_node<>, typename String = std::string,
+	    typename Array = std::vector<Node>,
+	    typename Map = std::map<String, Node>,
+	    typename Allocator = std::allocator<Node>,
 	    bool has_integer = true, bool has_uinteger = true>
 	struct basic_json;
 
 	template <typename Node = json_node<>, typename String = std::string,
-	    typename Array = std::vector<json_node<>>,
-	    typename Map = std::map<std::string, json_node<>>,
-	    typename Allocator = std::allocator<json_node<>>,
+	    typename Array = std::vector<Node>,
+	    typename Map = std::map<String, Node>,
+	    typename Allocator = std::allocator<Node>,
 	    bool has_integer = true, bool has_uinteger = true>
 	struct basic_const_json_span
 	{
 		using node_t = Node;
+		using value_t = Node;
+		using object_t = Map;
+		using array_t = Array;
+		using string_t = String;
+		using allocator_t = Allocator;
+		using kind_t = node_t::kind_t;
 		using number_t = node_t::number_t;
 		using boolean_t = node_t::boolean_t;
 		using integer_t = node_t::integer_t;
 		using uinteger_t = node_t::uinteger_t;
-		using string_t = String;
-		using object_t = Map;
-		using array_t = Array;
-		using allocator_t = Allocator;
-		using kind_t = node_t::kind_t;
-		using json_t = basic_json<node_t, string_t, array_t, object_t, allocator_t, has_integer, has_uinteger>;
 		using char_t = string_t::value_type;
+		using key_string_t = object_t::key_type;
+		using key_char_t = key_string_t::value_type;
 		using size_type = decltype((sizeof(int)));
 
 		static_assert(std::integral<char_t>);
 		static_assert(std::integral<boolean_t>);
+		static_assert(std::integral<key_char_t>);
 		static_assert(std::floating_point<number_t>);
 		static_assert(std::signed_integral<integer_t>);
 		static_assert(std::unsigned_integral<uinteger_t>);
-		static_assert(std::same_as<json_node<boolean_t, number_t, integer_t, uinteger_t>, node_t>);
-		static_assert(std::random_access_iterator<typename string_t::iterator>);
-		static_assert(std::random_access_iterator<typename array_t::iterator>);
-		static_assert(std::bidirectional_iterator<typename object_t::iterator>);
 		static_assert(std::same_as<node_t, typename array_t::value_type>);
-		static_assert(std::same_as<string_t, typename object_t::key_type>);
 		static_assert(std::same_as<node_t, typename object_t::mapped_type>);
+		static_assert(std::random_access_iterator<typename array_t::iterator>);
+		static_assert(std::random_access_iterator<typename string_t::iterator>);
+		static_assert(std::bidirectional_iterator<typename object_t::iterator>);
+		static_assert(std::random_access_iterator<typename key_string_t::iterator>);
+		static_assert(std::same_as<json_node<boolean_t, number_t, integer_t, uinteger_t>, node_t>);
+
+		using json_t = basic_json<node_t, string_t, array_t, object_t, allocator_t, has_integer, has_uinteger>;
 
 		json_t* json_{};
 
@@ -219,7 +224,7 @@ namespace bizwen
 		}
 
 		basic_const_json_span(node_t const& n) noexcept
-		    : json_(reinterpret_cast<json_t*>(n))
+		    : json_(reinterpret_cast<json_t*>(&n))
 		{
 		}
 
@@ -292,46 +297,49 @@ namespace bizwen
 		}
 	};
 
-	template <typename node, typename String,
+	template <typename Node, typename String,
 	    typename Array,
 	    typename Map,
 	    typename Allocator,
 	    bool has_integer, bool has_uinteger>
 	struct basic_json
 	{
-		using node_t = node;
+		using node_t = Node;
+		using object_t = Map;
+		using value_t = Node;
+		using array_t = Array;
+		using string_t = String;
+		using allocator_t = Allocator;
+		using kind_t = node_t::kind_t;
 		using number_t = node_t::number_t;
 		using boolean_t = node_t::boolean_t;
 		using integer_t = node_t::integer_t;
 		using uinteger_t = node_t::uinteger_t;
-		using null_t = nulljson_t;
-		using string_t = String;
-		using object_t = Map;
-		using array_t = Array;
-		using allocator_t = Allocator;
-		using kind_t = node_t::kind_t;
 		using char_t = string_t::value_type;
+		using key_string_t = object_t::key_type;
+		using key_char_t = key_string_t::value_type;
 		using size_type = decltype((sizeof(int)));
 
 		static_assert(std::integral<char_t>);
 		static_assert(std::integral<boolean_t>);
+		static_assert(std::integral<key_char_t>);
 		static_assert(std::floating_point<number_t>);
 		static_assert(std::signed_integral<integer_t>);
 		static_assert(std::unsigned_integral<uinteger_t>);
-		static_assert(std::same_as<json_node<boolean_t, number_t, integer_t, uinteger_t>, node_t>);
-		static_assert(std::random_access_iterator<typename string_t::iterator>);
-		static_assert(std::random_access_iterator<typename array_t::iterator>);
-		static_assert(std::bidirectional_iterator<typename object_t::iterator>);
 		static_assert(std::same_as<node_t, typename array_t::value_type>);
-		static_assert(std::same_as<string_t, typename object_t::key_type>);
 		static_assert(std::same_as<node_t, typename object_t::mapped_type>);
+		static_assert(std::random_access_iterator<typename array_t::iterator>);
+		static_assert(std::random_access_iterator<typename string_t::iterator>);
+		static_assert(std::bidirectional_iterator<typename object_t::iterator>);
+		static_assert(std::random_access_iterator<typename key_string_t::iterator>);
+		static_assert(std::same_as<json_node<boolean_t, number_t, integer_t, uinteger_t>, node_t>);
 
 		node_t node_{};
 
 		void dealloc() noexcept
 		{
 			auto k = node_.kind_;
-			auto&& stor_ = node_.stor_;
+			auto& stor_ = node_.stor_;
 
 			switch (k)
 			{
