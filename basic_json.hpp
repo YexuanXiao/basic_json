@@ -295,6 +295,67 @@ namespace bizwen
 
 			return json_->stor_.uint_;
 		}
+
+		constexpr basic_const_json_span operator[](key_string_t const& k)
+		{
+			assert(object());
+
+			auto& o = *stor().obj_;
+			auto i = o.find(k);
+
+			assert(i != o.end());
+
+			auto&& [key, v] = *i;
+
+			return v;
+		}
+
+		template <typename KeyStrLike>
+		constexpr basic_const_json_span operator[](KeyStrLike const& k)
+		{
+			assert(object());
+
+			auto& o = *stor().obj_;
+			auto i = o.find(k);
+
+			assert(i != o.end());
+
+			auto&& [_, v] = *i;
+
+			return v;
+		}
+
+		constexpr basic_const_json_span operator[](key_char_t* k)
+		{
+			assert(object());
+
+			auto& o = *stor().obj_;
+			auto i = o.find(k);
+
+			assert(i != o.end());
+
+			auto&& [_, v] = *i;
+
+			return v;
+		}
+
+		constexpr void emplace(string_t&& k, boolean_t v)
+		{
+			assert(object());
+
+			auto& o = *stor().obj_;
+			auto i = o.find(k);
+
+			if (i != o.end())
+			{
+				auto&& [_, v] = *i;
+				v = std::move(json_t{ v });
+			}
+			else
+			{
+				o.emplace_hint(i, k, v);
+			}
+		}
 	};
 
 	template <typename Node, typename String,
