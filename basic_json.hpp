@@ -2,6 +2,7 @@
 #include <iterator>
 #include <map>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -229,8 +230,9 @@ namespace bizwen
 
 		constexpr explicit operator boolean_t() const noexcept
 		{
-			// todo: replace all asserts as exceptions
-			assert(boolean());
+			if (!boolean())
+				throw std::runtime_error("json_error: value not a boolean.");
+
 			auto k = kind();
 
 			return k == kind_t::true_value ? 1 : 0;
@@ -247,34 +249,38 @@ namespace bizwen
 				return s.int_;
 			else if (k == kind_t::uinteger)
 				return s.uint_;
-			else
-				assert(number()), std::unreachable();
+
+			throw std::runtime_error("json_error:value isn't a number .");
 		}
 
 		constexpr explicit operator nulljson_t() const noexcept
 		{
-			assert(null());
+			if (!null())
+				throw std::runtime_error("json_error: value isn't a null.");
 
 			return nulljson;
 		}
 
 		constexpr explicit operator const string_type&() const& noexcept
 		{
-			assert(string());
+			if (!string())
+				throw std::runtime_error("json_error: value isn't a string.");
 
 			return *(json_->stor_.str_);
 		}
 
 		constexpr explicit operator const array_type&() const& noexcept
 		{
-			assert(array());
+			if (!array())
+				throw std::runtime_error("json_error: value isn't an array.");
 
 			return *(json_->stor_.arr_);
 		}
 
 		constexpr explicit operator const object_type&() const& noexcept
 		{
-			assert(object());
+			if (!object())
+				throw std::runtime_error("json_error: value isn't an object.");
 
 			return *(json_->stor_.obj_);
 		}
@@ -282,7 +288,8 @@ namespace bizwen
 		constexpr explicit operator integer_t() const noexcept
 		    requires(HasInteger)
 		{
-			assert(integer());
+			if (!integer())
+				throw std::runtime_error("json_error: value isn't an integer.");
 
 			return json_->stor_.int_;
 		}
@@ -290,14 +297,16 @@ namespace bizwen
 		constexpr explicit operator uinteger_t() const noexcept
 		    requires(HasUInteger)
 		{
-			assert(uinteger());
+			if (!uinteger())
+				throw std::runtime_error("json_error: value isn't an unsigned integer.");
 
 			return json_->stor_.uint_;
 		}
 
 		constexpr basic_const_json_span operator[](key_string_t const& k)
 		{
-			assert(object());
+			if (!object())
+				throw std::runtime_error("json_error: value isn't an object but is accessed using operator[].");
 
 			auto& o = *stor().obj_;
 			auto i = o.find(k);
@@ -312,7 +321,8 @@ namespace bizwen
 		template <typename KeyStrLike>
 		constexpr basic_const_json_span operator[](KeyStrLike const& k)
 		{
-			assert(object());
+			if (!object())
+				throw std::runtime_error("json_error: value isn't an object but is accessed using operator[].");
 
 			auto& o = *stor().obj_;
 			auto i = o.find(k);
@@ -326,7 +336,8 @@ namespace bizwen
 
 		constexpr basic_const_json_span operator[](key_char_t* k) const
 		{
-			assert(object());
+			if (!object())
+				throw std::runtime_error("json_error: value isn't an object but is accessed using operator[].");
 
 			auto& o = *stor().obj_;
 			auto i = o.find(k);
