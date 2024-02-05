@@ -311,7 +311,8 @@ namespace bizwen
 			auto& o = *stor().obj_;
 			auto i = o.find(k);
 
-			assert(i != o.end());
+			if (i == o.end())
+				throw std::runtime_error("key does not exist.");
 
 			auto&& [key, v] = *i;
 
@@ -327,7 +328,8 @@ namespace bizwen
 			auto& o = *stor().obj_;
 			auto i = o.find(k);
 
-			assert(i != o.end());
+			if (i == o.end())
+				throw std::runtime_error("key does not exist.");
 
 			auto&& [_, v] = *i;
 
@@ -342,11 +344,22 @@ namespace bizwen
 			auto& o = *stor().obj_;
 			auto i = o.find(k);
 
-			assert(i != o.end());
+			if (i == o.end())
+				throw std::runtime_error("key does not exist.");
 
 			auto&& [_, v] = *i;
 
 			return v;
+		}
+
+		constexpr basic_const_json_span operator[](array_type::size_type pos) const noexcept
+		{
+			if (!array())
+				throw std::runtime_error("json_error: value isn't an array but is accessed using operator[].");
+
+			auto& a = *stor().arr_;
+
+			return a[pos];
 		}
 	};
 
