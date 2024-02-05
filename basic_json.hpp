@@ -28,7 +28,7 @@ namespace bizwen
 	// and allocator<array> satisfy DefaultConstructable and TrivialCopyable
 	template <typename Boolean = bool, typename Number = double,
 	    typename Integer = long long, typename UInteger = unsigned long long, typename Allocator = std::allocator<void>>
-	struct json_node
+	struct json_node: protected Allocator
 	{
 		using number_t = Number;
 		using boolean_t = Boolean;
@@ -79,13 +79,13 @@ namespace bizwen
 	template <typename Node = json_node<>, typename String = std::string,
 	    typename Array = std::vector<Node>,
 	    typename Map = std::map<String, Node>,
-	    bool has_integer = true, bool has_uinteger = true>
+	    bool HasInteger = true, bool HasUInteger = true>
 	struct basic_json;
 
 	template <typename Node = json_node<>, typename String = std::string,
 	    typename Array = std::vector<Node>,
 	    typename Map = std::map<String, Node>,
-	    bool has_integer = true, bool has_uinteger = true>
+	    bool HasInteger = true, bool HasUInteger = true>
 	struct basic_const_json_span
 	{
 		using node_t = Node;
@@ -103,23 +103,11 @@ namespace bizwen
 		using key_char_t = key_string_t::value_type;
 		using size_type = decltype((sizeof(int)));
 
-		static_assert(std::integral<char_t>);
-		static_assert(std::integral<boolean_t>);
-		static_assert(std::integral<key_char_t>);
-		static_assert(std::floating_point<number_t>);
-		static_assert(std::signed_integral<integer_t>);
-		static_assert(std::unsigned_integral<uinteger_t>);
-		static_assert(sizeof(boolean_t) < sizeof(integer_t));
-		static_assert(sizeof(integer_t) == sizeof(uinteger_t));
-		static_assert(std::same_as<node_t, typename array_t::value_type>);
-		static_assert(std::same_as<node_t, typename object_t::mapped_type>);
-		static_assert(std::random_access_iterator<typename array_t::iterator>);
-		static_assert(std::random_access_iterator<typename string_t::iterator>);
-		static_assert(std::bidirectional_iterator<typename object_t::iterator>);
-		static_assert(std::random_access_iterator<typename key_string_t::iterator>);
-		static_assert(std::same_as<json_node<boolean_t, number_t, integer_t, uinteger_t>, node_t>);
+		using json_t = basic_json<node_t, string_t, array_t, object_t, HasInteger, HasUInteger>;
 
-		using json_t = basic_json<node_t, string_t, array_t, object_t, has_integer, has_uinteger>;
+		// span need to store HasInteger and has uinteger for deserializers
+		static inline constexpr bool has_integer = HasInteger;
+		static inline constexpr bool has_uinteger = HasUInteger;
 
 		json_t* json_{};
 
@@ -167,12 +155,12 @@ namespace bizwen
 			bool is_integer{};
 			bool is_uinteger{};
 
-			if constexpr (has_integer)
+			if constexpr (HasInteger)
 			{
 				is_integer = k == kind_t::integer;
 			}
 
-			if constexpr (has_uinteger)
+			if constexpr (HasUInteger)
 			{
 				is_uinteger = k == kind_t::uinteger;
 			}
@@ -191,13 +179,13 @@ namespace bizwen
 		}
 
 		[[nodiscard]] constexpr bool integer() const noexcept
-		    requires(has_integer)
+		    requires(HasInteger)
 		{
 			return kind() == kind_t::integer;
 		}
 
 		[[nodiscard]] constexpr bool uinteger() const noexcept
-		    requires(has_uinteger)
+		    requires(HasUInteger)
 		{
 			return kind() == kind_t::uinteger;
 		}
@@ -286,7 +274,7 @@ namespace bizwen
 		}
 
 		constexpr explicit operator integer_t() const noexcept
-		    requires(has_integer)
+		    requires(HasInteger)
 		{
 			assert(integer());
 
@@ -294,7 +282,7 @@ namespace bizwen
 		}
 
 		constexpr explicit operator uinteger_t() const noexcept
-		    requires(has_uinteger)
+		    requires(HasUInteger)
 		{
 			assert(uinteger());
 
@@ -343,52 +331,13 @@ namespace bizwen
 
 			return v;
 		}
-
-		// todo: move all emplace to non-const version
-		constexpr void emplace(key_string_t&& k, json_t&& v) noexcept
-		{
-			assert(!basic_const_json_span(v).empty());
-			// todo: destroy current value
-			assert(object());
-
-			auto& o = *stor().obj_;
-			auto i = o.find(k);
-
-			if (i != o.end())
-			{
-				auto&& [_, v] = *i;
-				v = std::move(v);
-			}
-			else
-			{
-				o.emplace_hint(i, k, v);
-			}
-		}
-
-		constexpr void emplace(key_string_t const& k, boolean_t v)
-		{
-			assert(object());
-
-			auto& o = *stor().obj_;
-			auto i = o.find(k);
-
-			if (i != o.end())
-			{
-				auto&& [_, v] = *i;
-				v = std::move(json_t{ v });
-			}
-			else
-			{
-				o.emplace_hint(i, k, v);
-			}
-		}
 	};
 
 	template <typename Node, typename String,
 	    typename Array,
 	    typename Map,
-	    bool has_integer, bool has_uinteger>
-	struct basic_json
+	    bool HasInteger, bool HasUInteger>
+	struct basic_json: private Node
 	{
 		using node_t = Node;
 		using object_t = Map;
@@ -404,6 +353,10 @@ namespace bizwen
 		using key_string_t = object_t::key_type;
 		using key_char_t = key_string_t::value_type;
 		using size_type = decltype((sizeof(int)));
+
+		// json needs to aware the allocator, but span does not
+		using allocator_t = node_t::allocator_t;
+		using traits_t = std::allocator_traits<allocator_t>;
 
 		static_assert(std::integral<char_t>);
 		static_assert(std::integral<boolean_t>);
@@ -421,52 +374,35 @@ namespace bizwen
 		static_assert(std::random_access_iterator<typename key_string_t::iterator>);
 		static_assert(std::same_as<json_node<boolean_t, number_t, integer_t, uinteger_t>, node_t>);
 
-		node_t node_{};
-
-		void dealloc() noexcept
-		{
-			auto k = node_.kind_;
-			auto& stor_ = node_.stor_;
-
-			switch (k)
-			{
-			case kind_t::string: {
-				delete (stor_.str_);
-				break;
-			}
-			case kind_t::array: {
-				delete (stor_.arr_);
-				break;
-			}
-			case kind_t::object: {
-				delete (stor_.obj_);
-				break;
-			}
-			}
-		}
-
-		constexpr void kind(kind_t k) noexcept { node_.kind_ = k; }
+		constexpr void kind(kind_t k) noexcept { static_cast<node_t&>(*this).kind_ = k; }
 
 		[[nodiscard]] constexpr kind_t kind() const noexcept
 		{
-			return node_.kind_;
+			return static_cast<node_t const&>(*this).kind_;
 		}
 
 		[[nodiscard]] constexpr node_t::stor_t_& stor() noexcept
 		{
-			return node_.stor_;
+			return static_cast<node_t&>(*this).stor_;
 		}
 
 		[[nodiscard]] constexpr node_t::stor_t_ const& stor() const noexcept
 		{
-			return node_.stor_;
+			return static_cast<node_t const&>(*this).stor_;
 		}
 
 		constexpr void swap(basic_json& rhs) noexcept
 		{
-			auto temp = node_;
-			node_ = rhs.node_;
-			rhs.node_ = temp;
+			{
+				auto temp = stor();
+				stor() = rhs.stor();
+				rhs.stor() = temp;
+			}
+			{
+				auto temp = kind();
+				static_cast<node_t&>(*this).kind_ = rhs.kind();
+				static_cast<node_t&>(rhs).kind_ = temp;
+			}
 		}
 
 		friend constexpr void swap(basic_json& lhs, basic_json& rhs) noexcept
@@ -480,6 +416,7 @@ namespace bizwen
 		{
 			rhs.swap(*this);
 		}
+
 		constexpr basic_json(decltype(nullptr)) = delete; // prevent implicit construct string
 
 		constexpr basic_json(boolean_t v) noexcept
@@ -530,14 +467,14 @@ namespace bizwen
 		}
 
 		constexpr basic_json(integer_t v) noexcept
-		    requires(has_integer)
+		    requires(HasInteger)
 		{
 			stor().int_ = v;
 			kind(kind_t::integer);
 		}
 
 		constexpr basic_json(uinteger_t v) noexcept
-		    requires(has_uinteger)
+		    requires(HasUInteger)
 		{
 			stor().uint_ = v;
 			kind(kind_t::integer);
@@ -546,16 +483,39 @@ namespace bizwen
 		constexpr basic_json(node_t&& n) noexcept
 		{
 			// todo: destroy this
-			node_ = node_t{};
-			node_ = std::move(n);
+			auto& node = static_cast<node_t&>(*this);
+			node = node_t{};
+			node = std::move(n);
 		}
 
 		constexpr operator node_t() && noexcept
 		{
-			auto temp = node_;
-			node_ = node_t{};
+			auto node = static_cast<node_t&>(*this);
+			static_cast<node_t&>(*this) = node_t{};
 
-			return temp;
+			return node;
+		}
+
+		void dealloc() noexcept
+		{
+			auto k = kind();
+			auto& s = stor();
+
+			switch (k)
+			{
+			case kind_t::string: {
+				delete (s.str_);
+				break;
+			}
+			case kind_t::array: {
+				delete (s.arr_);
+				break;
+			}
+			case kind_t::object: {
+				delete (s.obj_);
+				break;
+			}
+			}
 		}
 	};
 
