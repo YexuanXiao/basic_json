@@ -14,7 +14,7 @@ namespace bizwen
 {
 	class nulljson_t
 	{
-	   public:
+	public:
 		explicit constexpr nulljson_t(decltype(nullptr)) {}
 	};
 
@@ -29,7 +29,7 @@ namespace bizwen
 	    typename Integer = long long, typename UInteger = unsigned long long, typename Allocator = std::allocator<void>>
 	class json_node: protected Allocator
 	{
-	   public:
+	public:
 		using number_type = Number;
 		using boolean_type = Boolean;
 		using integer_type = Integer;
@@ -42,7 +42,7 @@ namespace bizwen
 		static_assert(std::unsigned_integral<uinteger_type>);
 		static_assert(std::same_as<void, typename allocator_type::value_type>);
 
-	   protected:
+	protected:
 		enum class kind_t : unsigned char
 		{
 			empty,
@@ -70,7 +70,7 @@ namespace bizwen
 		stor_t_ stor_;
 		kind_t kind_;
 
-	   public:
+	public:
 		constexpr json_node() noexcept = default;
 
 		constexpr json_node(json_node const&) = delete;
@@ -101,7 +101,7 @@ namespace bizwen
 		static inline constexpr bool has_integer = HasInteger;
 		static inline constexpr bool has_uinteger = HasUInteger;
 
-	   private:
+	private:
 		using kind_t = node_type::kind_t;
 		using number_t = node_type::number_t;
 		using boolean_t = node_type::boolean_t;
@@ -130,7 +130,7 @@ namespace bizwen
 			return json_->node_.stor_;
 		}
 
-	   public:
+	public:
 		[[nodiscard]] constexpr bool empty() const noexcept
 		{
 			return kind() == kind_t::empty;
@@ -374,7 +374,7 @@ namespace bizwen
 		using array_type = Array;
 		using string_type = String;
 
-	   private:
+	private:
 		using kind_t = node_type::kind_t;
 		using number_t = node_type::number_type;
 		using boolean_t = node_type::boolean_type;
@@ -476,7 +476,7 @@ namespace bizwen
 			}
 		}
 
-	   public:
+	public:
 		constexpr void swap(basic_json& rhs) noexcept
 		{
 			{
@@ -514,6 +514,11 @@ namespace bizwen
 		{
 			stor().num_ = v;
 			kind(kind_t::number);
+		}
+
+		template <std::floating_point T>
+		constexpr basic_json(T v) noexcept
+		{
 		}
 
 		constexpr basic_json(integer_t v) noexcept

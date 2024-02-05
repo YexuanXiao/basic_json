@@ -1,6 +1,5 @@
 ---
 BasedOnStyle: WebKit
-AccessModifierOffset: -1
 BreakBeforeBraces: Custom
 BraceWrapping:
   AfterCaseLabel:  false
@@ -31,3 +30,4 @@ UseCRLF: true
 UseTab: ForIndentation
 IndentWidth: 4
 TabWidth: 4
+IndentAccessModifiers: false
