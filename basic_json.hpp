@@ -217,7 +217,7 @@ namespace bizwen
 		}
 
 		basic_const_json_span(node_t const& n) noexcept
-		    : json_(reinterpret_cast<json_t*>(&n))
+		    : json_(reinterpret_cast<json_t*>(const_cast<node_t*>(&n)))
 		{
 		}
 
@@ -391,6 +391,18 @@ namespace bizwen
 			return static_cast<node_t const&>(*this).stor_;
 		}
 
+		template <typename T>
+		constexpr T* alloc()
+		{
+			return traits_t::template rebind<T>::other(*this).allocate(1);
+		}
+
+		template <typename T>
+		constexpr void dealloc(T* p) noexcept
+		{
+			return traits_t::template rebind<T>::other(*this).deallocate(p, 1);
+		}
+
 		constexpr void swap(basic_json& rhs) noexcept
 		{
 			{
@@ -432,37 +444,44 @@ namespace bizwen
 
 		constexpr basic_json(string_t v)
 		{
-			stor().str_ = new string_t(std::move(v));
+			stor().str_ = new (alloc<string_t>()) string_t(std::move(v));
 			kind(kind_t::string);
 		}
 
 		constexpr basic_json(char_t const* begin, char_t const* end)
 		{
-			stor().str_ = new string_t(begin, end);
+			stor().str_ = new (alloc<string_t>()) string_t(begin, end);
 			kind(kind_t::string);
 		}
 
 		constexpr basic_json(char_t const* str, size_type count)
 		{
-			stor().str_ = new string_t(str, count);
+			stor().str_ = new (alloc<string_t>()) string_t(str, count);
 			kind(kind_t::string);
 		}
 
 		constexpr basic_json(char_t const* str)
 		{
-			stor().str_ = new string_t(str);
+			stor().str_ = new (alloc<string_t>()) string_t(str);
+			kind(kind_t::string);
+		}
+
+		template <typename StrLike>
+		constexpr basic_json(StrLike str)
+		{
+			stor().str_ = new (alloc<string_t>()) string_t(str);
 			kind(kind_t::string);
 		}
 
 		constexpr basic_json(array_t&& arr)
 		{
-			stor().arr_ = new array_t(arr);
+			stor().arr_ = new (alloc<array_t>()) array_t(arr);
 			kind(kind_t::array);
 		}
 
 		constexpr basic_json(object_t&& obj)
 		{
-			stor().arr_ = new object_t(obj);
+			stor().arr_ = new (alloc<object_t>()) object_t(obj);
 			kind(kind_t::obj);
 		}
 
@@ -504,15 +523,15 @@ namespace bizwen
 			switch (k)
 			{
 			case kind_t::string: {
-				delete (s.str_);
+				dealloc(static_cast<string_t>(s.str_));
 				break;
 			}
 			case kind_t::array: {
-				delete (s.arr_);
+				dealloc(static_cast<array_t>(s.arr_));
 				break;
 			}
 			case kind_t::object: {
-				delete (s.obj_);
+				dealloc(static_cast<object_t>(s.obj_));
 				break;
 			}
 			}
