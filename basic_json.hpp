@@ -221,6 +221,7 @@ namespace bizwen
 		{
 		}
 
+		// the cast has undefined behavior because it's derive-to-base
 		basic_const_json_span(node_type const& n) noexcept
 		    : json_(reinterpret_cast<json_t*>(const_cast<node_type*>(&n)))
 		{
@@ -408,6 +409,7 @@ namespace bizwen
 		{
 			return traits_t::template rebind<T>::other(*this).deallocate(p, 1);
 		}
+
 		void dealloc() noexcept
 		{
 			auto k = kind();
@@ -417,14 +419,33 @@ namespace bizwen
 			{
 			case kind_t::string: {
 				dealloc(static_cast<string_type>(s.str_));
+
 				break;
 			}
 			case kind_t::array: {
-				dealloc(static_cast<array_type>(s.arr_));
+				for (auto&& i : *s.arr_)
+				{
+					auto& json = basic_json(std::move(i));
+					json.dealloc();
+				}
+
+				auto p = static_cast<array_type>(s.arr_);
+				(*p).~array_type();
+				dealloc(p);
+
 				break;
 			}
 			case kind_t::object: {
-				dealloc(static_cast<object_type>(s.obj_));
+				for (auto&& [_, v] : *s.arr_)
+				{
+					auto& json = basic_json(std::move(v));
+					json.dealloc();
+				}
+
+				auto p = static_cast<array_type>(s.obj_);
+				(*p).~object_type_type();
+				dealloc(p);
+
 				break;
 			}
 			}
@@ -457,7 +478,7 @@ namespace bizwen
 			rhs.swap(*this);
 		}
 
-		constexpr basic_json(decltype(nullptr)) = delete; // prevent implicit construct string
+		constexpr basic_json(decltype(nullptr)) noexcept = delete; // prevent implicit construct string
 
 		constexpr basic_json(boolean_t v) noexcept
 		{
@@ -529,7 +550,6 @@ namespace bizwen
 
 		constexpr basic_json(node_type&& n) noexcept
 		{
-			// todo: destroy this
 			auto& node = static_cast<node_type&>(*this);
 			node = node_type{};
 			node = std::move(n);
@@ -541,6 +561,11 @@ namespace bizwen
 			static_cast<node_type&>(*this) = node_type{};
 
 			return node;
+		}
+
+		constexpr ~basic_json() noexcept
+		{
+			dealloc();
 		}
 	};
 
