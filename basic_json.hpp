@@ -510,6 +510,12 @@ namespace bizwen
 			v ? kind(kind_t::true_value) : kind(kind_t::false_value);
 		}
 
+		constexpr basic_json(bool v) noexcept
+		    requires(!std::same_as<bool, boolean_t>)
+		{
+			v ? kind(kind_t::true_value) : kind(kind_t::false_value);
+		}
+
 		constexpr basic_json(number_t v) noexcept
 		{
 			stor().num_ = v;
@@ -519,17 +525,35 @@ namespace bizwen
 		template <std::floating_point T>
 		constexpr basic_json(T v) noexcept
 		{
+			stor().num_ = v;
+			kind(kind_t::number);
+		}
+
+		template <std::signed_integral T>
+		    requires(sizeof(T) > sizeof(boolean_t)) && HasInteger
+		constexpr basic_json(T v) noexcept
+		{
+			stor().int_ = v;
+			kind(kind_t::integer);
+		}
+
+		template <std::unsigned_integral T>
+		    requires(sizeof(T) > sizeof(boolean_t)) && HasUInteger
+		constexpr basic_json(T v) noexcept
+		{
+			stor().uint_ = v;
+			kind(kind_t::uinteger);
 		}
 
 		constexpr basic_json(integer_t v) noexcept
-		    requires(HasInteger)
+		    requires HasInteger
 		{
 			stor().int_ = v;
 			kind(kind_t::integer);
 		}
 
 		constexpr basic_json(uinteger_t v) noexcept
-		    requires(HasUInteger)
+		    requires HasUInteger
 		{
 			stor().uint_ = v;
 			kind(kind_t::integer);
