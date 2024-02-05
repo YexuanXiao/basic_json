@@ -17,20 +17,30 @@ namespace bizwen
 	};
 
 	inline constexpr nulljson_t nulljson{ nullptr };
+	template <typename Boolean, typename Number,
+	    typename Integer, typename UInteger, typename Allocator>
+	struct json_node;
 
+	// https://cplusplus.github.io/LWG/issue3917
+	// since the types of string, array and map are not known at this point
+	// memory allocation can only be done by instantiating void
+	// requires allocator<void>, allocator<string>, allocator<map>,
+	// and allocator<array> satisfy DefaultConstructable and TrivialCopyable
 	template <typename Boolean = bool, typename Number = double,
-	    typename Integer = long long, typename UInteger = unsigned long long>
+	    typename Integer = long long, typename UInteger = unsigned long long, typename Allocator = std::allocator<void>>
 	struct json_node
 	{
-		using boolean_t = Boolean;
 		using number_t = Number;
+		using boolean_t = Boolean;
 		using integer_t = Integer;
 		using uinteger_t = UInteger;
+		using allocator_t = Allocator;
 
+		static_assert(std::integral<boolean_t>);
 		static_assert(std::floating_point<number_t>);
 		static_assert(std::signed_integral<integer_t>);
 		static_assert(std::unsigned_integral<uinteger_t>);
-		static_assert(std::integral<boolean_t>);
+		static_assert(std::same_as<void, typename allocator_t::value_type>);
 
 		enum class kind_t : unsigned char
 		{
@@ -63,24 +73,18 @@ namespace bizwen
 
 		constexpr json_node(json_node const&) = delete;
 
-		constexpr json_node(json_node&& rhs) noexcept
-		{
-			stor_ = rhs.stor_;
-			kind_ = rhs.kind_;
-		}
+		constexpr json_node(json_node&& rhs) noexcept = default;
 	};
 
 	template <typename Node = json_node<>, typename String = std::string,
 	    typename Array = std::vector<Node>,
 	    typename Map = std::map<String, Node>,
-	    typename Allocator = std::allocator<Node>,
 	    bool has_integer = true, bool has_uinteger = true>
 	struct basic_json;
 
 	template <typename Node = json_node<>, typename String = std::string,
 	    typename Array = std::vector<Node>,
 	    typename Map = std::map<String, Node>,
-	    typename Allocator = std::allocator<Node>,
 	    bool has_integer = true, bool has_uinteger = true>
 	struct basic_const_json_span
 	{
@@ -89,7 +93,6 @@ namespace bizwen
 		using object_t = Map;
 		using array_t = Array;
 		using string_t = String;
-		using allocator_t = Allocator;
 		using kind_t = node_t::kind_t;
 		using number_t = node_t::number_t;
 		using boolean_t = node_t::boolean_t;
@@ -106,6 +109,8 @@ namespace bizwen
 		static_assert(std::floating_point<number_t>);
 		static_assert(std::signed_integral<integer_t>);
 		static_assert(std::unsigned_integral<uinteger_t>);
+		static_assert(sizeof(boolean_t) < sizeof(integer_t));
+		static_assert(sizeof(integer_t) == sizeof(uinteger_t));
 		static_assert(std::same_as<node_t, typename array_t::value_type>);
 		static_assert(std::same_as<node_t, typename object_t::mapped_type>);
 		static_assert(std::random_access_iterator<typename array_t::iterator>);
@@ -114,7 +119,7 @@ namespace bizwen
 		static_assert(std::random_access_iterator<typename key_string_t::iterator>);
 		static_assert(std::same_as<json_node<boolean_t, number_t, integer_t, uinteger_t>, node_t>);
 
-		using json_t = basic_json<node_t, string_t, array_t, object_t, allocator_t, has_integer, has_uinteger>;
+		using json_t = basic_json<node_t, string_t, array_t, object_t, has_integer, has_uinteger>;
 
 		json_t* json_{};
 
@@ -123,12 +128,12 @@ namespace bizwen
 			return json_->node_.kind_;
 		}
 
-		[[nodiscard]] constexpr node_t::storage_type_& stor() noexcept
+		[[nodiscard]] constexpr node_t::stor_t_& stor() noexcept
 		{
 			return json_->node_.stor_;
 		}
 
-		[[nodiscard]] constexpr node_t::storage_type_ const& stor() const noexcept
+		[[nodiscard]] constexpr node_t::stor_t_ const& stor() const noexcept
 		{
 			return json_->node_.stor_;
 		}
@@ -325,7 +330,7 @@ namespace bizwen
 			return v;
 		}
 
-		constexpr basic_const_json_span operator[](key_char_t* k)
+		constexpr basic_const_json_span operator[](key_char_t* k) const
 		{
 			assert(object());
 
@@ -339,7 +344,28 @@ namespace bizwen
 			return v;
 		}
 
-		constexpr void emplace(string_t&& k, boolean_t v)
+		// todo: move all emplace to non-const version
+		constexpr void emplace(key_string_t&& k, json_t&& v) noexcept
+		{
+			assert(!basic_const_json_span(v).empty());
+			// todo: destroy current value
+			assert(object());
+
+			auto& o = *stor().obj_;
+			auto i = o.find(k);
+
+			if (i != o.end())
+			{
+				auto&& [_, v] = *i;
+				v = std::move(v);
+			}
+			else
+			{
+				o.emplace_hint(i, k, v);
+			}
+		}
+
+		constexpr void emplace(key_string_t const& k, boolean_t v)
 		{
 			assert(object());
 
@@ -361,7 +387,6 @@ namespace bizwen
 	template <typename Node, typename String,
 	    typename Array,
 	    typename Map,
-	    typename Allocator,
 	    bool has_integer, bool has_uinteger>
 	struct basic_json
 	{
@@ -370,7 +395,6 @@ namespace bizwen
 		using value_t = Node;
 		using array_t = Array;
 		using string_t = String;
-		using allocator_t = Allocator;
 		using kind_t = node_t::kind_t;
 		using number_t = node_t::number_t;
 		using boolean_t = node_t::boolean_t;
@@ -387,6 +411,8 @@ namespace bizwen
 		static_assert(std::floating_point<number_t>);
 		static_assert(std::signed_integral<integer_t>);
 		static_assert(std::unsigned_integral<uinteger_t>);
+		static_assert(sizeof(boolean_t) < sizeof(integer_t));
+		static_assert(sizeof(integer_t) == sizeof(uinteger_t));
 		static_assert(std::same_as<node_t, typename array_t::value_type>);
 		static_assert(std::same_as<node_t, typename object_t::mapped_type>);
 		static_assert(std::random_access_iterator<typename array_t::iterator>);
@@ -426,12 +452,12 @@ namespace bizwen
 			return node_.kind_;
 		}
 
-		[[nodiscard]] constexpr node_t::storage_type_& stor() noexcept
+		[[nodiscard]] constexpr node_t::stor_t_& stor() noexcept
 		{
 			return node_.stor_;
 		}
 
-		[[nodiscard]] constexpr node_t::storage_type_ const& stor() const noexcept
+		[[nodiscard]] constexpr node_t::stor_t_ const& stor() const noexcept
 		{
 			return node_.stor_;
 		}
@@ -458,8 +484,7 @@ namespace bizwen
 
 		constexpr basic_json(boolean_t v) noexcept
 		{
-			stor().bool_ = v;
-			kind(kind_t::boolean);
+			v ? kind(kind_t::true_value) : kind(kind_t::false_value);
 		}
 
 		constexpr basic_json(number_t v) noexcept
@@ -504,24 +529,6 @@ namespace bizwen
 			kind(kind_t::obj);
 		}
 
-		constexpr basic_json(string_t* str) noexcept
-		{
-			stor().str_ = str;
-			kind(kind_t::string);
-		}
-
-		constexpr basic_json(array_t* arr) noexcept
-		{
-			stor().arr_ = arr;
-			kind(kind_t::array);
-		}
-
-		constexpr basic_json(object_t* obj) noexcept
-		{
-			stor().arr_ = obj;
-			kind(kind_t::obj);
-		}
-
 		constexpr basic_json(integer_t v) noexcept
 		    requires(has_integer)
 		{
@@ -538,7 +545,7 @@ namespace bizwen
 
 		constexpr basic_json(node_t&& n) noexcept
 		{
-			// todo: destory this
+			// todo: destroy this
 			node_ = node_t{};
 			node_ = std::move(n);
 		}
