@@ -19,9 +19,6 @@ namespace bizwen
 	};
 
 	inline constexpr nulljson_t nulljson{ nullptr };
-	template <typename Boolean, typename Number,
-	    typename Integer, typename UInteger, typename Allocator>
-	struct json_node;
 
 	// https://cplusplus.github.io/LWG/issue3917
 	// since the types of string, array and map are not known at this point
@@ -32,6 +29,7 @@ namespace bizwen
 	    typename Integer = long long, typename UInteger = unsigned long long, typename Allocator = std::allocator<void>>
 	class json_node: protected Allocator
 	{
+	   public:
 		using number_type = Number;
 		using boolean_type = Boolean;
 		using integer_type = Integer;
@@ -44,7 +42,7 @@ namespace bizwen
 		static_assert(std::unsigned_integral<uinteger_type>);
 		static_assert(std::same_as<void, typename allocator_type::value_type>);
 
-	   private:
+	   protected:
 		enum class kind_t : unsigned char
 		{
 			empty,
@@ -78,13 +76,14 @@ namespace bizwen
 		constexpr json_node(json_node const&) = delete;
 
 		constexpr json_node(json_node&& rhs) noexcept = default;
+		constexpr json_node& operator=(json_node&& rhs) noexcept = default;
 	};
 
 	template <typename Node = json_node<>, typename String = std::string,
 	    typename Array = std::vector<Node>,
 	    typename Map = std::map<String, Node>,
 	    bool HasInteger = true, bool HasUInteger = true>
-	struct basic_json;
+	class basic_json;
 
 	template <typename Node = json_node<>, typename String = std::string,
 	    typename Array = std::vector<Node>,
@@ -319,7 +318,7 @@ namespace bizwen
 			return v;
 		}
 
-		template <typename KeyStrLike>
+		template <std::convertible_to<key_string_t> KeyStrLike>
 		constexpr basic_const_json_span operator[](KeyStrLike const& k)
 		{
 			if (!object())
@@ -377,16 +376,16 @@ namespace bizwen
 
 	   private:
 		using kind_t = node_type::kind_t;
-		using number_t = node_type::number_t;
-		using boolean_t = node_type::boolean_t;
-		using integer_t = node_type::integer_t;
-		using uinteger_t = node_type::uinteger_t;
+		using number_t = node_type::number_type;
+		using boolean_t = node_type::boolean_type;
+		using integer_t = node_type::integer_type;
+		using uinteger_t = node_type::uinteger_type;
 		using char_t = string_type::value_type;
 		using key_string_t = object_type::key_type;
 		using key_char_t = key_string_t::value_type;
 
 		// json needs to aware the allocator, but span does not
-		using allocator_t = node_type::allocator_t;
+		using allocator_t = node_type::allocator_type;
 		using traits_t = std::allocator_traits<allocator_t>;
 
 		static_assert(std::integral<char_t>);
@@ -405,33 +404,33 @@ namespace bizwen
 		static_assert(std::random_access_iterator<typename key_string_t::iterator>);
 		static_assert(std::same_as<json_node<boolean_t, number_t, integer_t, uinteger_t>, node_type>);
 
-		constexpr void kind(kind_t k) noexcept { static_cast<node_type&>(*this).kind_ = k; }
+		constexpr void kind(kind_t k) noexcept { (*this).kind_ = k; }
 
 		[[nodiscard]] constexpr kind_t kind() const noexcept
 		{
-			return static_cast<node_type const&>(*this).kind_;
+			return (*this).kind_;
 		}
 
 		[[nodiscard]] constexpr node_type::stor_t_& stor() noexcept
 		{
-			return static_cast<node_type&>(*this).stor_;
+			return (*this).stor_;
 		}
 
 		[[nodiscard]] constexpr node_type::stor_t_ const& stor() const noexcept
 		{
-			return static_cast<node_type const&>(*this).stor_;
+			return (*this).stor_;
 		}
 
 		template <typename T>
 		constexpr T* alloc()
 		{
-			return traits_t::template rebind<T>::other(*this).allocate(1);
+			return typename traits_t::template rebind_alloc<T>(*this).allocate(1);
 		}
 
 		template <typename T>
 		constexpr void dealloc(T* p) noexcept
 		{
-			return traits_t::template rebind<T>::other(*this).deallocate(p, 1);
+			return typename traits_t::template rebind_alloc<T>(*this).deallocate(p, 1);
 		}
 
 		void dealloc() noexcept
@@ -442,32 +441,34 @@ namespace bizwen
 			switch (k)
 			{
 			case kind_t::string: {
-				dealloc(static_cast<string_type>(s.str_));
+				dealloc(static_cast<string_type*>(s.str_));
 
 				break;
 			}
 			case kind_t::array: {
-				for (auto&& i : *s.arr_)
+				auto p = static_cast<array_type*>(s.arr_);
+
+				for (auto&& i : *p)
 				{
-					auto& json = basic_json(std::move(i));
+					auto&& json = basic_json(std::move(i));
 					json.dealloc();
 				}
 
-				auto p = static_cast<array_type>(s.arr_);
 				(*p).~array_type();
 				dealloc(p);
 
 				break;
 			}
 			case kind_t::object: {
-				for (auto&& [_, v] : *s.arr_)
+				auto p = static_cast<object_type*>(s.obj_);
+
+				for (auto&& [_, v] : *p)
 				{
-					auto& json = basic_json(std::move(v));
+					auto&& json = basic_json(std::move(v));
 					json.dealloc();
 				}
 
-				auto p = static_cast<array_type>(s.obj_);
-				(*p).~object_type_type();
+				(*p).~object_type();
 				dealloc(p);
 
 				break;
@@ -485,8 +486,8 @@ namespace bizwen
 			}
 			{
 				auto temp = kind();
-				static_cast<node_type&>(*this).kind_ = rhs.kind();
-				static_cast<node_type&>(rhs).kind_ = temp;
+				(*this).kind_ = rhs.kind();
+				(rhs).kind_ = temp;
 			}
 		}
 
@@ -515,7 +516,21 @@ namespace bizwen
 			kind(kind_t::number);
 		}
 
-		constexpr basic_json(string_type v)
+		constexpr basic_json(integer_t v) noexcept
+		    requires(HasInteger)
+		{
+			stor().int_ = v;
+			kind(kind_t::integer);
+		}
+
+		constexpr basic_json(uinteger_t v) noexcept
+		    requires(HasUInteger)
+		{
+			stor().uint_ = v;
+			kind(kind_t::integer);
+		}
+
+		constexpr explicit basic_json(string_type v)
 		{
 			stor().str_ = new (alloc<string_type>()) string_type(std::move(v));
 			kind(kind_t::string);
@@ -533,56 +548,43 @@ namespace bizwen
 			kind(kind_t::string);
 		}
 
-		constexpr basic_json(char_t const* str)
+		constexpr explicit basic_json(char_t const* str)
 		{
 			stor().str_ = new (alloc<string_type>()) string_type(str);
 			kind(kind_t::string);
 		}
 
-		template <typename StrLike>
+		template <std::convertible_to<string_type> StrLike>
 		constexpr basic_json(StrLike str)
 		{
 			stor().str_ = new (alloc<string_type>()) string_type(str);
 			kind(kind_t::string);
 		}
 
-		constexpr basic_json(array_type&& arr)
+		constexpr explicit basic_json(array_type arr)
 		{
 			stor().arr_ = new (alloc<array_type>()) array_type(arr);
 			kind(kind_t::array);
 		}
 
-		constexpr basic_json(object_type&& obj)
+		constexpr explicit basic_json(object_type obj)
 		{
 			stor().arr_ = new (alloc<object_type>()) object_type(obj);
 			kind(kind_t::obj);
 		}
 
-		constexpr basic_json(integer_t v) noexcept
-		    requires(HasInteger)
+		constexpr explicit basic_json(node_type&& n) noexcept
 		{
-			stor().int_ = v;
-			kind(kind_t::integer);
-		}
-
-		constexpr basic_json(uinteger_t v) noexcept
-		    requires(HasUInteger)
-		{
-			stor().uint_ = v;
-			kind(kind_t::integer);
-		}
-
-		constexpr basic_json(node_type&& n) noexcept
-		{
-			auto& node = static_cast<node_type&>(*this);
-			node = node_type{};
-			node = std::move(n);
+			this->kind_ = decltype(this->kind_){};
+			this->stor_ = decltype(this->stor_){};
+			static_cast<node_type&>(*this) = std::move(n);
 		}
 
 		constexpr operator node_type() && noexcept
 		{
 			auto node = static_cast<node_type&>(*this);
-			static_cast<node_type&>(*this) = node_type{};
+			kind(kind_t{});
+			stor() = decltype(stor()){};
 
 			return node;
 		}
