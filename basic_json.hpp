@@ -798,10 +798,10 @@ namespace bizwen
 				auto lptr = new (guard.get()) array_type(rarr);
 				array_type& larr{ *lptr };
 				auto sentry = larr.begin();
-				auto first = rarr.begin();
-				auto last = rarr.end();
 				rollbacker_part_ rollbacker(sentry, larr);
 
+				auto first = rarr.begin();
+				auto last = rarr.end();
 				for (; first != last; ++sentry, ++first)
 				{
 					static_cast<basic_json&>(*sentry).clone(static_cast<basic_json const&>(*first));
@@ -809,7 +809,7 @@ namespace bizwen
 
 				rollbacker.release();
 				guard.release();
-				stor().arr_ = larr;
+				stor().arr_ = lptr;
 				break;
 			}
 			case kind_t::object: {
@@ -817,9 +817,10 @@ namespace bizwen
 				alloc_guard_<object_type> guard(*this);
 				auto lptr = new (guard.get()) object_type();
 				object_type& lobj{ *lptr };
+				rollbacker_all_ rollbacker(lobj);
+
 				auto first = robj.begin();
 				auto last = robj.end();
-				rollbacker_all_ rollbacker(lobj);
 
 				for (; first != last; ++first)
 				{
@@ -831,12 +832,15 @@ namespace bizwen
 
 				rollbacker.release();
 				guard.release();
-				stor().obj_ = lobj;
+				stor().obj_ = lptr;
 				break;
 			}
-
-				kind(rk);
+			default: {
+				stor() = rhs.stor();
 			}
+			}
+
+			kind(rk);
 		}
 
 	public:
