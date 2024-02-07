@@ -433,7 +433,7 @@ namespace bizwen
 			return typename traits_t::template rebind_alloc<T>(*this).deallocate(p, 1);
 		}
 
-		void dealloc() noexcept
+		void destroy() noexcept
 		{
 			auto k = kind();
 			auto& s = stor();
@@ -441,7 +441,9 @@ namespace bizwen
 			switch (k)
 			{
 			case kind_t::string: {
-				dealloc(static_cast<string_type*>(s.str_));
+				auto p = static_cast<string_type*>(s.str_);
+				(*p).~string_type();
+				dealloc(s);
 
 				break;
 			}
@@ -451,7 +453,7 @@ namespace bizwen
 				for (auto&& i : *p)
 				{
 					auto&& json = basic_json(std::move(i));
-					json.dealloc();
+					json.destroy();
 				}
 
 				(*p).~array_type();
@@ -465,7 +467,7 @@ namespace bizwen
 				for (auto&& [_, v] : *p)
 				{
 					auto&& json = basic_json(std::move(v));
-					json.dealloc();
+					json.destroy();
 				}
 
 				(*p).~object_type();
@@ -475,6 +477,142 @@ namespace bizwen
 			}
 			}
 		}
+
+		template <typename T>
+		struct alloc_guard_
+		{
+			T* ptr;
+			basic_json const& json;
+
+			constexpr alloc_guard_() noexcept = delete;
+
+			constexpr alloc_guard_(alloc_guard_ const&) noexcept = delete;
+
+			constexpr alloc_guard_(basic_json const& j)
+			    : json(j)
+			{
+				ptr = json.alloc<T>();
+			}
+
+			constexpr void release() noexcept
+			{
+				ptr = nullptr;
+			}
+
+			constexpr T* get() noexcept
+			{
+				assert(ptr);
+
+				return ptr;
+			}
+
+			constexpr ~alloc_guard_()
+			{
+				if (ptr)
+					json.dealloc(ptr);
+			}
+		};
+
+		struct rollbacker_part_
+		{
+			array_type::iterator& sentry;
+			array_type& array;
+
+			constexpr rollbacker_part_() noexcept = delete;
+
+			constexpr rollbacker_part_(rollbacker_part_ const&) noexcept = delete;
+
+			constexpr rollbacker_part_(array_type::iterator& i, array_type& a) noexcept
+			    : sentry(i)
+			    , array(a)
+			{
+			}
+
+			constexpr ~rollbacker_part_()
+			{
+				auto end = array.end();
+
+				if (sentry == end)
+					return;
+
+				for (auto begin = array.begin(); begin != sentry; ++begin)
+				{
+					reinterpret_cast<basic_json&>(*begin).destroy();
+				}
+			}
+		};
+
+		template <typename T>
+		struct rollbacker_all_
+		{
+		};
+
+		template <>
+		struct rollbacker_all_<array_type>
+		{
+			array_type& array;
+			bool done = false;
+
+			constexpr rollbacker_all_() noexcept = delete;
+
+			constexpr rollbacker_all_(rollbacker_all_ const&) noexcept = delete;
+
+			constexpr void release()
+			{
+				done = true;
+			}
+
+			constexpr rollbacker_all_(array_type& a) noexcept
+			    : array(a)
+			{
+			}
+
+			constexpr ~rollbacker_all_()
+			{
+				if (done)
+					return;
+
+				auto end = array.end();
+
+				for (auto begin = array.begin(); begin != end; ++begin)
+				{
+					reinterpret_cast<basic_json&>(*begin).destroy();
+				}
+			}
+		};
+
+		template <>
+		struct rollbacker_all_<object_type>
+		{
+			object_type& object;
+			bool done = false;
+
+			constexpr void release()
+			{
+				done = true;
+			}
+
+			constexpr rollbacker_all_(object_type& o) noexcept
+			    : object(o)
+			{
+			}
+
+			constexpr ~rollbacker_all_()
+			{
+
+				if (done)
+					return;
+
+				auto end = object.end();
+				auto begin = object.begin();
+
+				for (auto begin = object.begin(); begin != end; ++begin)
+				{
+					auto&& [key, value] = *begin;
+					reinterpret_cast<basic_json&>(value).destroy();
+				}
+			}
+		};
 
 	public:
 		constexpr void swap(basic_json& rhs) noexcept
@@ -561,44 +699,62 @@ namespace bizwen
 
 		constexpr explicit basic_json(string_type v)
 		{
-			stor().str_ = new (alloc<string_type>()) string_type(std::move(v));
+			alloc_guard_<string_type> guard(*this);
+			stor().str_ = new (guard.get()) string_type(std::move(v));
+			guard.release();
 			kind(kind_t::string);
 		}
 
 		constexpr basic_json(char_t const* begin, char_t const* end)
 		{
-			stor().str_ = new (alloc<string_type>()) string_type(begin, end);
+			alloc_guard_<string_type> guard(*this);
+			stor().str_ = new (guard.get()) string_type(begin, end);
+			guard.release();
 			kind(kind_t::string);
 		}
 
 		constexpr basic_json(char_t const* str, string_type::size_type count)
 		{
-			stor().str_ = new (alloc<string_type>()) string_type(str, count);
+			alloc_guard_<string_type> guard(*this);
+			stor().str_ = new (guard.get()) string_type(str, count);
+			guard.release();
 			kind(kind_t::string);
 		}
 
 		constexpr explicit basic_json(char_t const* str)
 		{
-			stor().str_ = new (alloc<string_type>()) string_type(str);
+			alloc_guard_<string_type> guard(*this);
+			stor().str_ = new (guard.get()) string_type(str);
+			guard.release();
 			kind(kind_t::string);
 		}
 
 		template <std::convertible_to<string_type> StrLike>
 		constexpr basic_json(StrLike str)
 		{
-			stor().str_ = new (alloc<string_type>()) string_type(str);
+			alloc_guard_<string_type> guard(*this);
+			stor().str_ = new (guard.get()) string_type(str);
+			guard.release();
 			kind(kind_t::string);
 		}
 
 		constexpr explicit basic_json(array_type arr)
 		{
-			stor().arr_ = new (alloc<array_type>()) array_type(arr);
+			rollbacker_all_<array_type> rollbacker(arr);
+			alloc_guard_<array_type> guard(*this);
+			stor().arr_ = new (guard.get()) array_type(std::move(arr));
+			guard.release();
+			rollbacker.release();
 			kind(kind_t::array);
 		}
 
 		constexpr explicit basic_json(object_type obj)
 		{
-			stor().arr_ = new (alloc<object_type>()) object_type(obj);
+			rollbacker_all_<object_type> rollbacker(obj);
+			alloc_guard_<object_type> guard(*this);
+			stor().arr_ = new (guard.get()) object_type(std::move(obj));
+			guard.release();
+			rollbacker.release();
 			kind(kind_t::obj);
 		}
 
@@ -618,9 +774,86 @@ namespace bizwen
 			return node;
 		}
 
+	private:
+		void clone(const basic_json& rhs)
+		{
+			auto rk = rhs.kind();
+			auto const& rs = rhs.stor();
+			auto& s = stor();
+
+			switch (rk)
+			{
+			case kind_t::string: {
+				auto const& rstr = *static_cast<string_type const*>(rs.str_);
+				alloc_guard_<string_type> mem(*this);
+				auto lptr = mem.get();
+				lptr = new (lptr) string_type(rstr);
+				mem.release();
+				stor().str_ = lptr;
+				break;
+			}
+			case kind_t::array: {
+				auto const& rarr = *static_cast<array_type const*>(rs.arr_);
+				alloc_guard_<array_type> guard(*this);
+				auto lptr = new (guard.get()) array_type(rarr);
+				array_type& larr{ *lptr };
+				auto sentry = larr.begin();
+				auto first = rarr.begin();
+				auto last = rarr.end();
+				rollbacker_part_ rollbacker(sentry, larr);
+
+				for (; first != last; ++sentry, ++first)
+				{
+					static_cast<basic_json&>(*sentry).clone(static_cast<basic_json const&>(*first));
+				}
+
+				rollbacker.release();
+				guard.release();
+				stor().arr_ = larr;
+				break;
+			}
+			case kind_t::object: {
+				auto const& robj = *static_cast<object_type const*>(rhs.stor().obj_);
+				alloc_guard_<object_type> guard(*this);
+				auto lptr = new (guard.get()) object_type();
+				object_type& lobj{ *lptr };
+				auto first = robj.begin();
+				auto last = robj.end();
+				rollbacker_all_ rollbacker(lobj);
+
+				for (; first != last; ++first)
+				{
+					auto const& [rkey, rvalue] = *first;
+					basic_json temp;
+					temp.clone(static_cast<basic_json const&>(rvalue));
+					lobj.emplace(rkey, node_type(std::move(temp)));
+				}
+
+				rollbacker.release();
+				guard.release();
+				stor().obj_ = lobj;
+				break;
+			}
+
+				kind(rk);
+			}
+		}
+
+	public:
+		constexpr basic_json(const basic_json& rhs)
+		{
+			clone(rhs);
+		}
+
+		constexpr basic_json& operator=(const basic_json& rhs)
+		{
+			destroy();
+			clone(rhs);
+		}
+
 		constexpr ~basic_json() noexcept
 		{
-			dealloc();
+			destroy();
 		}
 	};
 
