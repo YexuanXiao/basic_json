@@ -22,14 +22,14 @@ int main()
 	j j13{ str, 3 };
 	j j14{ str };
 	j j15{ std::string_view{ str } };
-	j j16{ std::vector<bizwen::json_node<>>{} };
-	j j17{ std::map<std::string, bizwen::json_node<>>{} };
-	j j18{ bizwen::json_node<>{} };
+	j j16{ std::vector<bizwen::basic_json_node<>>{} };
+	j j17{ std::map<std::string, bizwen::basic_json_node<>>{} };
+	j j18{ bizwen::basic_json_node<>{} };
 	swap(j17, j18);
 	j17.swap(j18);
 	j17 = j18;
 	std::swap(j17, j18);
-	bizwen::json_node n = std::move(j18).move_to_node();
+	bizwen::basic_json_node n = std::move(j18).move_to_node();
 	using cjs = bizwen::const_json_slice;
 	cjs c1;
 	c1.empty();
@@ -58,12 +58,12 @@ int main()
 	bool b{ c5 };
 	bizwen::nulljson_t nj{ c5 };
 	std::string const& s{ c5 };
-	std::vector<bizwen::json_node<>> const& a{ c5 };
+	std::vector<bizwen::basic_json_node<>> const& a{ c5 };
 	for (auto const& i : a)
 	{
 		cjs item{ i };
 	}
-	std::map<std::string, bizwen::json_node<>> const& o{ c5 };
+	std::map<std::string, bizwen::basic_json_node<>> const& o{ c5 };
 	for (auto const& [k, v] : o)
 	{
 		cjs item{ v };
