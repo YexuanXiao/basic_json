@@ -87,6 +87,465 @@ namespace bizwen
 	    typename Array = std::vector<Node>,
 	    typename Map = std::map<String, Node>,
 	    bool HasInteger = true, bool HasUInteger = true>
+	class basic_const_json_span;
+
+	template <typename Node = json_node<>, typename String = std::string,
+	    typename Array = std::vector<Node>,
+	    typename Map = std::map<String, Node>,
+	    bool HasInteger = true, bool HasUInteger = true>
+	class basic_json_span;
+
+	template <typename Node, typename String,
+	    typename Array,
+	    typename Map,
+	    bool HasInteger, bool HasUInteger>
+	class basic_json_span
+	{
+		using node_type = Node;
+		using value_type = Node;
+		using object_type = Map;
+		using array_type = Array;
+		using string_type = String;
+
+		// spans need to store HasInteger and HasUInteger for deserializers
+		static inline constexpr bool has_integer = HasInteger;
+		static inline constexpr bool has_uinteger = HasUInteger;
+
+	private:
+		using json_t = basic_json<node_type, string_type, array_type, object_type, HasInteger, HasUInteger>;
+		using kind_t = json_t::kind_t;
+		using number_t = node_type::number_type;
+		using boolean_t = node_type::boolean_type;
+		using integer_t = node_type::integer_type;
+		using uinteger_t = node_type::uinteger_type;
+		using char_t = string_type::value_type;
+		using key_string_t = object_type::key_type;
+		using key_char_t = key_string_t::value_type;
+		using stor_t = json_t::stor_t;
+
+		friend class basic_json<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
+		friend class basic_const_json_span<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
+
+		json_t* json_{};
+
+		constexpr kind_t kind() const noexcept
+		{
+			assert(json_);
+
+			return json_->kind_;
+		}
+
+		constexpr stor_t const& stor() const noexcept
+		{
+			return json_->stor_;
+		}
+
+	public:
+		[[nodiscard]] constexpr bool empty() const noexcept
+		{
+			return kind() == kind_t::empty;
+		}
+
+		[[nodiscard]] constexpr bool string() const noexcept
+		{
+			return kind() == kind_t::string;
+		}
+
+		[[nodiscard]] constexpr bool null() const noexcept
+		{
+			return kind() == kind_t::null;
+		}
+
+		[[nodiscard]] constexpr bool boolean() const noexcept
+		{
+			auto k = kind();
+
+			return k == kind_t::true_value || k == kind_t::false_value;
+		}
+
+		[[nodiscard]] constexpr bool number() const noexcept
+		{
+			auto k = kind();
+
+			bool is_integer{};
+			bool is_uinteger{};
+
+			if constexpr (HasInteger)
+			{
+				is_integer = k == kind_t::integer;
+			}
+
+			if constexpr (HasUInteger)
+			{
+				is_uinteger = k == kind_t::uinteger;
+			}
+
+			return k == kind_t::number || is_integer || is_uinteger;
+		}
+
+		[[nodiscard]] constexpr bool object() const noexcept
+		{
+			return kind() == kind_t::object;
+		}
+
+		[[nodiscard]] constexpr bool array() const noexcept
+		{
+			return kind() == kind_t::array;
+		}
+
+		[[nodiscard]] constexpr bool integer() const noexcept
+		    requires(HasInteger)
+		{
+			return kind() == kind_t::integer;
+		}
+
+		[[nodiscard]] constexpr bool uinteger() const noexcept
+		    requires(HasUInteger)
+		{
+			return kind() == kind_t::uinteger;
+		}
+
+		constexpr void swap(basic_json_span& rhs) noexcept
+		{
+			auto temp = json_;
+			json_ = rhs.json_;
+			rhs.json_ = temp;
+		}
+
+		friend constexpr void swap(basic_json_span& lhs, basic_json_span& rhs) noexcept
+		{
+			lhs.swap(rhs);
+		}
+
+		// similar to iterators, default construction is allowed, but except for operator=,
+		// operations on default-constructed span cause undefined behavior.
+		constexpr basic_json_span() noexcept = default;
+
+		constexpr basic_json_span(basic_json_span&& rhs) noexcept = default;
+
+		constexpr basic_json_span(basic_json_span const& rhs) noexcept = default;
+
+		constexpr basic_json_span(json_t& j) noexcept
+		    : json_(&j)
+		{
+		}
+
+		constexpr basic_json_span(json_t const& j) noexcept
+		    : json_(&j)
+		{
+		}
+
+		// the cast has undefined behavior because it's derive-to-base
+		basic_json_span(node_type const& n) noexcept
+		    : json_(reinterpret_cast<json_t*>(const_cast<node_type*>(&n)))
+		{
+		}
+
+		constexpr basic_json_span& operator=(basic_json_span const& rhs) noexcept = default;
+
+		constexpr basic_json_span& operator=(basic_json_span&& rhs) noexcept = default;
+
+		constexpr explicit operator boolean_t() const
+		{
+			if (!boolean())
+				throw std::runtime_error("json error: value not a boolean.");
+
+			auto k = kind();
+
+			return k == kind_t::true_value ? 1 : 0;
+		}
+
+		constexpr explicit operator number_t() const
+		{
+			auto k = kind();
+			auto s = stor();
+
+			if (k == kind_t::number)
+				return s.num_;
+			else if (k == kind_t::integer)
+				return s.int_;
+			else if (k == kind_t::uinteger)
+				return s.uint_;
+
+			throw std::runtime_error("json error: value isn't a number.");
+		}
+
+		constexpr explicit operator nulljson_t() const
+		{
+			if (!null())
+				throw std::runtime_error("json error: value isn't a null.");
+
+			return nulljson;
+		}
+
+		constexpr explicit operator string_type&() const&
+		{
+			if (!string())
+				throw std::runtime_error("json error: value isn't a string.");
+
+			return *static_cast<string_type*>(json_->stor_.str_);
+		}
+
+		constexpr explicit operator array_type&() const&
+		{
+			if (!array())
+				throw std::runtime_error("json error: value isn't an array.");
+
+			return *static_cast<array_type*>(json_->stor_.arr_);
+		}
+
+		constexpr explicit operator object_type&() const&
+		{
+			if (!object())
+				throw std::runtime_error("json error: value isn't an object.");
+
+			return *static_cast<object_type*>(json_->stor_.obj_);
+		}
+
+		constexpr explicit operator integer_t() const
+		    requires(HasInteger)
+		{
+			if (!integer())
+				throw std::runtime_error("json error: value isn't an integer.");
+
+			return json_->stor_.int_;
+		}
+
+		constexpr explicit operator uinteger_t() const
+		    requires(HasUInteger)
+		{
+			if (!uinteger())
+				throw std::runtime_error("json error: value isn't an unsigned integer.");
+
+			return json_->stor_.uint_;
+		}
+
+		constexpr basic_json_span operator[](key_string_t const& k) const
+		{
+			if (!object())
+				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
+
+			auto const& o = *static_cast<object_type const*>(stor().obj_);
+			auto i = o.find(k);
+
+			if (i == o.end())
+				throw std::runtime_error("key does not exist.");
+
+			auto const& [key, v] = *i;
+
+			return v;
+		}
+
+		template <typename KeyStrLike>
+		    requires std::convertible_to<KeyStrLike, key_string_t> || std::convertible_to<key_string_t, KeyStrLike>
+		constexpr basic_json_span operator[](KeyStrLike const& k) const
+		{
+			if (!object())
+				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
+
+			auto const& o = *static_cast<object_type const*>(stor().obj_);
+			auto i = o.find(k);
+
+			if (i == o.end())
+				throw std::runtime_error("key does not exist.");
+
+			auto const& [_, v] = *i;
+
+			return v;
+		}
+
+		constexpr basic_json_span operator[](key_char_t* k) const
+		{
+			if (!object())
+				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
+
+			auto const& o = *static_cast<object_type const*>(stor().obj_);
+			auto i = o.find(k);
+
+			if (i == o.end())
+				throw std::runtime_error("key does not exist.");
+
+			auto const& [_, v] = *i;
+
+			return v;
+		}
+
+		constexpr basic_json_span operator[](array_type::size_type pos) const noexcept
+		{
+			if (!array())
+				throw std::runtime_error("json error: value isn't an array but is accessed using operator[].");
+
+			auto const& a = *static_cast<array_type const*>(stor().arr_);
+
+			return a[pos];
+		}
+
+		constexpr basic_json_span& operator=(string_type const& str)
+		{
+			bool is_string = string();
+			bool is_empty = empty();
+
+			if (!is_string || !is_empty)
+				throw std::runtime_error("json error: current value is not empty or not a string.");
+
+			if (is_string)
+			{
+				*static_cast<string_type*>(stor().str_) = str;
+			}
+			else // empty
+			{
+				typename json_t::template alloc_guard_<string_type> guard(*json_);
+				stor().str_ = new (guard.get()) string_type(str);
+				guard.release();
+				(*json_).kind(kind_t::string_type);
+			}
+		}
+
+		constexpr basic_json_span& operator=(string_type&& str)
+		{
+			bool is_string = string();
+			bool is_empty = empty();
+
+			if (!is_string || !is_empty)
+				throw std::runtime_error("json error: current value is not empty or not a string.");
+
+			if (is_string)
+			{
+				*static_cast<string_type*>(stor().str_) = std::move(str);
+			}
+			else // empty
+			{
+				typename json_t::template alloc_guard_<string_type> guard(*json_);
+				stor().str_ = new (guard.get()) string_type(std::move(str));
+				guard.release();
+				(*json_).kind(kind_t::string_type);
+			}
+		}
+
+		constexpr basic_json_span& operator=(char_t* str)
+		{
+			bool is_string = string();
+			bool is_empty = empty();
+
+			if (!is_string || !is_empty)
+				throw std::runtime_error("json error: current value is not empty or not a string.");
+
+			if (is_string)
+			{
+				*static_cast<string_type*>(stor().str_) = str;
+			}
+			else // empty
+			{
+				typename json_t::template alloc_guard_<string_type> guard(*json_);
+				stor().str_ = new (guard.get()) string_type(str);
+				guard.release();
+				(*json_).kind(kind_t::string_type);
+			}
+		}
+		template <typename StrLike>
+		    requires std::convertible_to<StrLike, string_type> || std::convertible_to<string_type, StrLike>
+		constexpr basic_json_span& operator=(StrLike const& str)
+		{
+			bool is_string = string();
+			bool is_empty = empty();
+
+			if (!is_string || !is_empty)
+				throw std::runtime_error("json error: current value is not empty or not a string.");
+
+			if (is_empty)
+			{
+				typename json_t::template alloc_guard_<string_type> guard(*json_);
+				stor().str_ = new (guard.get()) string_type(str);
+				guard.release();
+				(*json_).kind(kind_t::string);
+			}
+			else
+			{
+				*static_cast<string_type*>(stor().str_) = str;
+			}
+		}
+
+		constexpr basic_json_span& operator=(nulljson_t n)
+		{
+			bool is_null = null();
+			bool is_empty = empty();
+
+			if (!is_null || !is_empty)
+				throw std::runtime_error("json error: current value is not empty or not null.");
+
+			if (is_empty)
+				(*json_).kind(kind_t::null);
+		}
+
+		constexpr basic_json_span& operator=(bool b)
+		{
+			bool is_boolean = boolean();
+			bool is_empty = empty();
+
+			if (!is_boolean || !is_empty)
+				throw std::runtime_error("json error: current value is not empty or not null.");
+
+			if (is_empty)
+				(*json_).kind(b ? kind_t::true_value : kind_t::false_value);
+		}
+
+		constexpr basic_json_span& operator=(boolean_t b)
+		    requires(!std::same_as<boolean_t, bool>)
+		{
+			*this = b;
+		}
+
+		constexpr basic_json_span& operator=(number_t n)
+		{
+			bool is_number = number() || uinteger() || integer();
+			bool is_empty = empty();
+
+			if (!is_number || !is_empty)
+				throw std::runtime_error("json error: current value is not empty or not null.");
+
+			(*json_).stor().num_ = n;
+			(*json_).kind(kind_t::number);
+		}
+
+		constexpr basic_json_span& operator=(integer_t i)
+		{
+			bool is_number = number() || uinteger() || integer();
+			bool is_empty = empty();
+
+			if (!is_number || !is_empty)
+				throw std::runtime_error("json error: current value is not empty or not null.");
+
+			(*json_).stor().int_ = i;
+			(*json_).kind(kind_t::integer);
+		}
+
+		constexpr basic_json_span& operator=(uinteger_t i)
+		{
+			bool is_number = number() || uinteger() || integer();
+			bool is_empty = empty();
+
+			if (!is_number || !is_empty)
+				throw std::runtime_error("json error: current value is not empty or not null.");
+
+			(*json_).stor().uint_ = i;
+			(*json_).kind(kind_t::uinteger);
+		}
+
+		constexpr basic_json_span& operator=(json_t& j)
+		{
+			json_ = &j;
+		}
+
+		constexpr basic_json_span& operator=(node_type& n)
+		{
+			json_ = static_cast<json_t*>(&n);
+		}
+	};
+
+	template <typename Node, typename String,
+	    typename Array,
+	    typename Map,
+	    bool HasInteger, bool HasUInteger>
 	class basic_const_json_span
 	{
 		using node_type = Node;
@@ -111,7 +570,8 @@ namespace bizwen
 		using key_char_t = key_string_t::value_type;
 		using stor_t = json_t::stor_t;
 
-		friend class basic_json<node_type, string_type, array_type, object_type, HasInteger, HasUInteger>;
+		friend class basic_json<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
+		friend class basic_json_span<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
 
 		json_t* json_{};
 
@@ -366,6 +826,11 @@ namespace bizwen
 
 			return a[pos];
 		}
+
+		constexpr basic_const_json_span(basic_json_span<Node, String, Array, Map, HasInteger, HasUInteger> const& s)
+		{
+			json_ = s.json_;
+		}
 	};
 
 	template <typename Node, typename String,
@@ -390,12 +855,12 @@ namespace bizwen
 		using key_string_t = object_type::key_type;
 		using key_char_t = key_string_t::value_type;
 
-		// json needs to aware the allocator, but span does not
 		using allocator_t = node_type::allocator_type;
 		using traits_t = std::allocator_traits<allocator_t>;
 
 		using stor_t = node_type::stor_t;
 		friend class basic_const_json_span<node_type, string_type, array_type, object_type, HasInteger, HasUInteger>;
+		friend class basic_json_span<node_type, string_type, array_type, object_type, HasInteger, HasUInteger>;
 
 		static_assert(std::integral<char_t>);
 		static_assert(std::integral<boolean_t>);
@@ -737,7 +1202,7 @@ namespace bizwen
 
 		template <typename StrLike>
 		    requires std::convertible_to<StrLike, string_type> || std::convertible_to<string_type, StrLike>
-		constexpr basic_json(StrLike str)
+		constexpr basic_json(StrLike const& str)
 		{
 			alloc_guard_<string_type> guard(*this);
 			stor().str_ = new (guard.get()) string_type(str);
@@ -878,9 +1343,20 @@ namespace bizwen
 		{
 			destroy();
 		}
+
+		constexpr basic_json_span<node_type, string_type, array_type, object_type, HasInteger, HasUInteger> span()
+		{
+			return *this;
+		}
+
+		constexpr basic_const_json_span<node_type, string_type, array_type, object_type, HasInteger, HasUInteger> span() const
+		{
+			return *this;
+		}
 	};
 
 	using json = basic_json<>;
 	using const_json_span = basic_const_json_span<>;
+	using json_span = basic_json_span<>;
 
 } // namespace bizwen
