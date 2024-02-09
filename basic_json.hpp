@@ -72,9 +72,7 @@ namespace bizwen
 
 	public:
 		constexpr json_node() noexcept = default;
-
-		constexpr json_node(json_node const&) = delete;
-
+		constexpr json_node(json_node const&) = default;
 		constexpr json_node(json_node&& rhs) noexcept = default;
 		constexpr json_node& operator=(json_node&& rhs) noexcept = default;
 	};
@@ -443,7 +441,7 @@ namespace bizwen
 			case kind_t::string: {
 				auto p = static_cast<string_type*>(s.str_);
 				(*p).~string_type();
-				dealloc(s);
+				dealloc(static_cast<string_type*>(s.str_));
 
 				break;
 			}
@@ -475,6 +473,9 @@ namespace bizwen
 
 				break;
 			}
+			default: {
+				// make clang happy
+			}
 			}
 		}
 
@@ -482,13 +483,13 @@ namespace bizwen
 		struct alloc_guard_
 		{
 			T* ptr;
-			basic_json const& json;
+			basic_json& json;
 
 			constexpr alloc_guard_() noexcept = delete;
 
 			constexpr alloc_guard_(alloc_guard_ const&) noexcept = delete;
 
-			constexpr alloc_guard_(basic_json const& j)
+			constexpr alloc_guard_(basic_json& j)
 			    : json(j)
 			{
 				ptr = json.alloc<T>();
@@ -513,22 +514,22 @@ namespace bizwen
 			}
 		};
 
-		struct rollbacker_part_
+		struct rollbacker_array_part_
 		{
 			array_type::iterator& sentry;
 			array_type& array;
 
-			constexpr rollbacker_part_() noexcept = delete;
+			constexpr rollbacker_array_part_() noexcept = delete;
 
-			constexpr rollbacker_part_(rollbacker_part_ const&) noexcept = delete;
+			constexpr rollbacker_array_part_(rollbacker_array_part_ const&) noexcept = delete;
 
-			constexpr rollbacker_part_(array_type::iterator& i, array_type& a) noexcept
+			constexpr rollbacker_array_part_(array_type::iterator& i, array_type& a) noexcept
 			    : sentry(i)
 			    , array(a)
 			{
 			}
 
-			constexpr ~rollbacker_part_()
+			constexpr ~rollbacker_array_part_()
 			{
 				auto end = array.end();
 
@@ -542,32 +543,27 @@ namespace bizwen
 			}
 		};
 
-		template <typename T>
-		struct rollbacker_all_
-		{
-		};
-
-		template <>
-		struct rollbacker_all_<array_type>
+		struct rollbacker_array_all_
 		{
 			array_type& array;
-			bool done = false;
+			bool done;
 
-			constexpr rollbacker_all_() noexcept = delete;
+			constexpr rollbacker_array_all_() noexcept = delete;
 
-			constexpr rollbacker_all_(rollbacker_all_ const&) noexcept = delete;
+			constexpr rollbacker_array_all_(rollbacker_array_all_ const&) noexcept = delete;
 
-			constexpr void release()
+			constexpr void release() noexcept
 			{
 				done = true;
 			}
 
-			constexpr rollbacker_all_(array_type& a) noexcept
+			constexpr rollbacker_array_all_(array_type& a) noexcept
 			    : array(a)
+			    , done(false)
 			{
 			}
 
-			constexpr ~rollbacker_all_()
+			constexpr ~rollbacker_array_all_()
 			{
 				if (done)
 					return;
@@ -581,25 +577,24 @@ namespace bizwen
 			}
 		};
 
-		template <>
-		struct rollbacker_all_<object_type>
+		struct rollbacker_map_all_
 		{
 			object_type& object;
-			bool done = false;
+			bool done;
 
-			constexpr void release()
+			constexpr void release() noexcept
 			{
 				done = true;
 			}
 
-			constexpr rollbacker_all_(object_type& o) noexcept
+			constexpr rollbacker_map_all_(object_type& o) noexcept
 			    : object(o)
+			    , done(false)
 			{
 			}
 
-			constexpr ~rollbacker_all_()
+			constexpr ~rollbacker_map_all_()
 			{
-
 				if (done)
 					return;
 
@@ -729,7 +724,8 @@ namespace bizwen
 			kind(kind_t::string);
 		}
 
-		template <std::convertible_to<string_type> StrLike>
+		template <typename StrLike>
+		    requires std::convertible_to<StrLike, string_type> || std::convertible_to<string_type, StrLike>
 		constexpr basic_json(StrLike str)
 		{
 			alloc_guard_<string_type> guard(*this);
@@ -740,7 +736,7 @@ namespace bizwen
 
 		constexpr explicit basic_json(array_type arr)
 		{
-			rollbacker_all_<array_type> rollbacker(arr);
+			rollbacker_array_all_ rollbacker(arr);
 			alloc_guard_<array_type> guard(*this);
 			stor().arr_ = new (guard.get()) array_type(std::move(arr));
 			guard.release();
@@ -750,12 +746,12 @@ namespace bizwen
 
 		constexpr explicit basic_json(object_type obj)
 		{
-			rollbacker_all_<object_type> rollbacker(obj);
+			rollbacker_map_all_ rollbacker(obj);
 			alloc_guard_<object_type> guard(*this);
 			stor().arr_ = new (guard.get()) object_type(std::move(obj));
 			guard.release();
 			rollbacker.release();
-			kind(kind_t::obj);
+			kind(kind_t::object);
 		}
 
 		constexpr explicit basic_json(node_type&& n) noexcept
@@ -775,7 +771,7 @@ namespace bizwen
 		}
 
 	private:
-		void clone(const basic_json& rhs)
+		constexpr void clone(const basic_json& rhs)
 		{
 			auto rk = rhs.kind();
 			auto const& rs = rhs.stor();
@@ -789,7 +785,7 @@ namespace bizwen
 				auto lptr = mem.get();
 				lptr = new (lptr) string_type(rstr);
 				mem.release();
-				stor().str_ = lptr;
+				s.str_ = lptr;
 				break;
 			}
 			case kind_t::array: {
@@ -798,7 +794,7 @@ namespace bizwen
 				auto lptr = new (guard.get()) array_type(rarr);
 				array_type& larr{ *lptr };
 				auto sentry = larr.begin();
-				rollbacker_part_ rollbacker(sentry, larr);
+				rollbacker_array_part_ rollbacker(sentry, larr);
 
 				auto first = rarr.begin();
 				auto last = rarr.end();
@@ -807,17 +803,16 @@ namespace bizwen
 					static_cast<basic_json&>(*sentry).clone(static_cast<basic_json const&>(*first));
 				}
 
-				rollbacker.release();
 				guard.release();
-				stor().arr_ = lptr;
+				s.arr_ = lptr;
 				break;
 			}
 			case kind_t::object: {
-				auto const& robj = *static_cast<object_type const*>(rhs.stor().obj_);
+				auto const& robj = *static_cast<object_type const*>(rs.obj_);
 				alloc_guard_<object_type> guard(*this);
 				auto lptr = new (guard.get()) object_type();
 				object_type& lobj{ *lptr };
-				rollbacker_all_ rollbacker(lobj);
+				rollbacker_map_all_ rollbacker(lobj);
 
 				auto first = robj.begin();
 				auto last = robj.end();
@@ -832,11 +827,11 @@ namespace bizwen
 
 				rollbacker.release();
 				guard.release();
-				stor().obj_ = lptr;
+				s.obj_ = lptr;
 				break;
 			}
 			default: {
-				stor() = rhs.stor();
+				s = rs;
 			}
 			}
 
@@ -853,6 +848,8 @@ namespace bizwen
 		{
 			destroy();
 			clone(rhs);
+
+			return *this;
 		}
 
 		constexpr ~basic_json() noexcept
