@@ -27,7 +27,7 @@ namespace bizwen
 	// satisfy DefaultConstructable and TrivialCopyable.
 	template <typename Boolean = bool, typename Number = double,
 	    typename Integer = long long, typename UInteger = unsigned long long, typename Allocator = std::allocator<void>>
-	class json_node: protected Allocator
+	class basic_json_node: protected Allocator
 	{
 	public:
 		using number_type = Number;
@@ -71,25 +71,25 @@ namespace bizwen
 		kind_t kind_;
 
 	public:
-		constexpr json_node() noexcept = default;
-		constexpr json_node(json_node const&) = default;
-		constexpr json_node(json_node&& rhs) noexcept = default;
-		constexpr json_node& operator=(json_node&& rhs) noexcept = default;
+		constexpr basic_json_node() noexcept = default;
+		constexpr basic_json_node(basic_json_node const&) = default;
+		constexpr basic_json_node(basic_json_node&& rhs) noexcept = default;
+		constexpr basic_json_node& operator=(basic_json_node&& rhs) noexcept = default;
 	};
 
-	template <typename Node = json_node<>, typename String = std::string,
+	template <typename Node = basic_json_node<>, typename String = std::string,
 	    typename Array = std::vector<Node>,
 	    typename Map = std::map<String, Node>,
 	    bool HasInteger = true, bool HasUInteger = true>
 	class basic_json;
 
-	template <typename Node = json_node<>, typename String = std::string,
+	template <typename Node = basic_json_node<>, typename String = std::string,
 	    typename Array = std::vector<Node>,
 	    typename Map = std::map<String, Node>,
 	    bool HasInteger = true, bool HasUInteger = true>
 	class basic_const_json_slice;
 
-	template <typename Node = json_node<>, typename String = std::string,
+	template <typename Node = basic_json_node<>, typename String = std::string,
 	    typename Array = std::vector<Node>,
 	    typename Map = std::map<String, Node>,
 	    bool HasInteger = true, bool HasUInteger = true>
@@ -915,7 +915,7 @@ namespace bizwen
 		static_assert(std::random_access_iterator<typename string_type::iterator>);
 		static_assert(std::bidirectional_iterator<typename object_type::iterator>);
 		static_assert(std::random_access_iterator<typename key_string_t::iterator>);
-		static_assert(std::same_as<json_node<boolean_t, number_t, integer_t, uinteger_t>, node_type>);
+		static_assert(std::same_as<basic_json_node<boolean_t, number_t, integer_t, uinteger_t>, node_type>);
 
 		constexpr void kind(kind_t k) noexcept { (*this).kind_ = k; }
 

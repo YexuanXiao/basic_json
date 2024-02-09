@@ -23,7 +23,9 @@ This is a modern C++ library for working with JSON data. It aims to provide full
 ## Roadmap
 
 Stage 1: JSON representation, accessors and modifiers
+
 Stage 2: Serializer and deserializer
+
 Stage 3: JSON Pointer and Patch
 
 ![figure](https://github.com/YexuanXiao/basic_json/assets/20025591/2f59ef41-b2b9-42ff-a0b4-bddb50014797)

@@ -1,0 +1,297 @@
+<pre class='metadata'>
+Title: A Minimal JSON Support Library for C++
+Abstract: This paper proposes a minimal JSON support library for C++, which provides a simple and efficient way to represent and manipulate JSON data. The library consists of four main components: a json class that represents a JSON value, a basic_json_node class that provide a type-erased json storage, and two json_slice class that provides access and modification operations to the json class. The library aims to be compatible with the existing C++ standard library, and provides strong extension support.
+Editor: Yexuan Xiao, bizwen@nykz.org
+Shortname: ????
+Revision: 0
+Status: D
+Audience: LEWG
+Group: WG21
+Date: 2024-02-09
+Markup Shorthands: markdown yes
+Markup Shorthands: biblio yes
+ED: https://github.com/YexuanXiao/basic_json/blob/master/proposal.bs
+</pre>
+
+Motivation
+==========
+
+JSON is a widely used data-interchange format, but C++ does not have a built-in support for it. There are many third-party libraries that provide JSON support for C++, but they have some drawbacks, such as:
+
+- They may have external dependencies, which can increase the complexity and size of the project, and introduce potential errors and incompatibilities.
+- They may have different interfaces, conventions, and styles, which can reduce the readability and consistency of the code, and increase the learning curve for new users.
+- They may have different levels of features, performance, and compatibility, which can make it hard to choose the best one for a specific use case, and may require switching between different libraries for different scenarios.
+- They may not follow the modern C++ standards and best practices, which can limit the usability and portability of the code, and prevent the use of new language features and idioms.
+
+Therefore, this proposal aims to provide a minimal JSON support library for C++, which can address these issues, and offer the following benefits:
+
+- It does not have any external dependencies, and can be easily integrated into any C++ project, without affecting the existing code or environment.
+- It has a simple and consistent interface, which follows the existing C++ standard library conventions and styles, and can be easily learned and used by C++ programmers.
+- It has a sufficient level of features, performance, and compatibility, which can cover most common use cases of JSON data, and can work with any conforming C++ compiler and platform.
+
+Proposal
+========
+
+I propose to add a json header file and 5 classes (templates): nulljson_t, basic_json_node, basic_json, basic_const_json_splice, basic_json_splice.
+Since JSON has a self-referential structure, type erasure techniques must be used, so basic_json_node is designed.
+
+![JSON Value](https://www.json.org/img/value.png)
+
+nulljson_t is a type similar to nullopt_t, used to indicate that the value of JSON is null.
+
+basic_json_node is a substitute for basic_json, providing storage space for basic_json in any situation where circular dependencies may occur.
+
+basica_json can be implemented as inheriting from basic_json_node, or storing a basic_json_node as a non-static data member, and basic_json does not have any other non-static data members, which makes basic_json and basic_json_node have the same size.
+
+basic_json_node has 5 template parameters, Boolean, Number, Integer, UInteger, Allocator, users can use these template parameters to customize their preferred types and allocators,
+
+for example, some users may prefer to use fixed-length integer types, some users may prefer to use integer types provided by C++ keywords, and the same for floating-point types.
+
+The reason why the allocator is a template parameter of basic_json_node rather than basic_json is that basic_json must have the same size as basic_json_node, so char is usually used to instantiate the allocator (void type can be used after LWG issue 3917 is resolved),
+
+and then rebind is used in the member functions of basic_json to allocate storage. Once a specialization of basic_json_node is available, basic_json can be instantiated.basic_json has 6 template parameters: Node, String, Array, Map, HasInteger, HasUInteger.
+
+Node must be a specialization of basic_json_node, and since basic_json_node provides type aliases to obtain the template arguments, basic_json can extract these type aliases, rewrite the specialization of basic_json_node, and compare it with Node to ensure this.
+
+basic_json_node usually holds an allocator, an enum that indicates the kind, and a union that stores boolean, number (floating point), integer, unsigned integer, string, array(vector), object(map).
+
+For arithmetic and boolean types, they are directly stored in the union, and since map and array store basic_json_node, pointers are needed to break the circular dependency,
+
+and since the two types are not determined when instantiating basic_json_node, they are actually void*. Conceptually, basic_json is a hybrid of container adapters and containers.
+
+Although string type does not have circular dependency problem, void* is also used to save the space. The relationship between basic_json and basic_json_node is shown in the following figure:
+
+![figure](https://github.com/YexuanXiao/basic_json/assets/20025591/2f59ef41-b2b9-42ff-a0b4-bddb50014797)
+
+Therefore, the Allocator template parameter of basic_json_node is not used directly, but is rebound to the allocators of string, array, and object. basic_json_node is conceptually similar to void*, it does not hold memory, but can transfer memory through it.
+
+The triviality of basic_json_node depends on Allocator, if Allocator is trivial, then basic_json arrays will get faster copy speed.
+
+Most of the member functions of basic_json are constructors, which make C++ values easily convertible to json. The destructor is responsible for destructing the entire object, basic_json also has copy constructor and copy assignment, as well as swap implemented by hidden friend and member functions.
+
+In addition, basic_json also has a function move_to_node, which can transfer memory from basic_json to basic_json_node, just like a pointer.
+
+The most special point of my proposal is to expose basic_json_node, which allows users to implement their own serialization and deserialization functions in a non-intrusive way: if a basic_json object that stores a boolean or arithmetic type value is needed, then construct it directly through the constructor,
+
+if a basic_json object that stores an array or object type is needed, then users can construct array and object themselves, such as `std::vector<basic_json_node<>> a` and `std::map<std::string, basic_json_node> m`, then construct basic_json objects through the constructors of boolean or arithmetic types,
+
+and then insert them into the container, finally, move a or m to the constructor of json, and get a basic_json object that represents an array or map.
+
+json_splice and const_json_splice are similar to iterator and const_iterator, const_json_splice is constructed from basic_json const& and holds a pointer to json. All functions of const_json_splice are const, and return a "value" or a reference to a const object.
+
+json_splice has all the member functions that const_json_splice has, and can be converted to const_json_splice. In addition, json_splice also has modifiers, which can modify the value without changing the type of the value stored by json.
+
+json_splice is trivially copyable, so copying a json_splice has low overhead. Any operation on json_splice does not produce a copy of the basic_json object, and for subscript operations, json_splice always returns a new json_splice.
+
+This design makes the basic_json template independent of the specific vector type, map type, string type, and if the user likes, he can use std::map, std::flat_map, std::unordered_map,
+
+and the string type as the Key of the Object and the string type as the value can be different, which makes KeyString can be implemented with a dictionary that records all possible values. This design does not care whether the string type has char_traits and allocator,
+
+and in extreme cases, this design allows both strings to be std::string_view, such as mapping the json byte stream to memory, each std::string_view references a part of the memory.
+
+This makes it possible to not copy any strings (but still need to use dynamic memory to store maps and arrays).
+
+I have not implemented any allocator-related functions, because I do not have much experience with allocators. I have not provided serialization and deserialization functions, because C++ currently does not have a good io api, and different users may have their own serialization and deserialization needs, so this is not part of the proposal. The design is completely feasible and stable, but I need some feedback to appropriately increase the usability of the library. I have provided a simple implementation on [Github](https://github.com/YexuanXiao/basic_json/blob/master/basic_json.hpp), the source code of the proposal is available in the same repository.
+
+Appendix
+======
+
+```cpp
+class nulljson_t
+{
+public:
+	explicit constexpr nulljson_t(/* impl-defined*/) {}
+};
+inline constexpr nulljson_t nulljson{ /* impl-defined*/ };
+template <typename Boolean = bool, typename Number = double,
+	typename Integer = long long, typename UInteger = unsigned long long, typename Allocator = std::allocator<void>>
+class basic_json_node
+{
+public:
+	using number_type = Number;
+	using boolean_type = Boolean;
+	using integer_type = Integer;
+	using uinteger_type = UInteger;
+	using allocator_type = Allocator;
+	constexpr basic_json_node() noexcept = default;
+	constexpr basic_json_node(basic_json_node const&) = default;
+	constexpr basic_json_node(basic_json_node&& rhs) noexcept = default;
+	constexpr basic_json_node& operator=(basic_json_node&& rhs) noexcept = default;
+}
+template <typename Node = basic_json_node<>, typename String = std::string,
+	typename Array = std::vector<Node>,
+	typename Map = std::map<String, Node>,
+	bool HasInteger = true, bool HasUInteger = true>
+class basic_json
+{
+	using node_type = Node;
+	using object_type = Map;
+	using value_type = Node;
+	using array_type = Array;
+	using string_type = String;
+	constexpr void swap(basic_json& rhs) noexcept;
+	friend constexpr void swap(basic_json& lhs, basic_json& rhs) noexcept;
+	constexpr basic_json() noexcept = default;
+	constexpr basic_json(basic_json&& rhs) noexcept;
+	constexpr basic_json(decltype(nullptr)) noexcept = delete;
+	constexpr basic_json(boolean_t v) noexcept;
+	constexpr basic_json(bool v) noexcept;
+		requires(!std::same_as<bool, boolean_t>);
+	constexpr basic_json(number_t v) noexcept;
+	template <std::floating_point T>
+	constexpr basic_json(T v) noexcept;
+	template <std::signed_integral T>
+		requires(sizeof(T) > sizeof(boolean_t)) && HasInteger
+	constexpr basic_json(T v) noexcept;
+	template <std::unsigned_integral T>
+		requires(sizeof(T) > sizeof(boolean_t)) && HasUInteger
+	constexpr basic_json(T v) noexcept;
+	constexpr basic_json(integer_t v) noexcept
+		requires HasInteger;
+	constexpr basic_json(uinteger_t v) noexcept
+		requires HasUInteger;
+	constexpr explicit basic_json(string_type v);
+	constexpr basic_json(char_t const* begin, char_t const* end);
+	constexpr basic_json(char_t const* str, string_type::size_type count);
+	constexpr explicit basic_json(char_t const* str);
+	template <typename StrLike>
+		requires std::convertible_to<StrLike, string_type> || std::convertible_to<string_type, StrLike>
+	constexpr basic_json(StrLike const& str);
+	constexpr explicit basic_json(array_type arr);
+	constexpr explicit basic_json(object_type obj);
+	constexpr explicit basic_json(node_type&& n) noexcept;
+	[[nodiscard("discard nodes will cause leaks")]] constexpr node_type move_to_node() && noexcept;
+	constexpr basic_json(const basic_json& rhs);
+	constexpr basic_json& operator=(const basic_json& rhs);
+	constexpr ~basic_json() noexcept;
+	constexpr basic_json_slice<node_type, string_type, array_type, object_type, HasInteger, HasUInteger> slice();
+	constexpr basic_const_json_slice<node_type, string_type, array_type, object_type, HasInteger, HasUInteger> slice() const;
+	
+}
+template <typename Node = basic_json_node<>, typename String = std::string,
+	typename Array = std::vector<Node>,
+	typename Map = std::map<String, Node>,
+	bool HasInteger = true, bool HasUInteger = true>
+class basic_json_slice
+{
+	using node_type = Node;
+	using value_type = Node;
+	using object_type = Map;
+	using array_type = Array;
+	using string_type = String;
+	static inline constexpr bool has_integer = HasInteger;
+	static inline constexpr bool has_uinteger = HasUInteger;
+	[[nodiscard]] constexpr bool empty() const noexcept;
+	[[nodiscard]] constexpr bool string() const noexcept;
+	[[nodiscard]] constexpr bool null() const noexcept;
+	[[nodiscard]] constexpr bool boolean() const noexcept;
+	[[nodiscard]] constexpr bool number() const noexcept;
+	[[nodiscard]] constexpr bool object() const noexcept;
+	[[nodiscard]] constexpr bool array() const noexcept;
+	[[nodiscard]] constexpr bool integer() const noexcept
+		requires(HasInteger);
+	[[nodiscard]] constexpr bool uinteger() const noexcept
+		requires(HasUInteger);
+	constexpr void swap(basic_json_slice& rhs) noexcept;
+	friend constexpr void swap(basic_json_slice& lhs, basic_json_slice& rhs) noexcept;
+	constexpr basic_json_slice() noexcept = default;
+	constexpr basic_json_slice(basic_json_slice&& rhs) noexcept = default;
+	constexpr basic_json_slice(basic_json_slice const& rhs) noexcept = default;
+	constexpr basic_json_slice(json_t& j) noexcept;
+	basic_json_slice(node_type& n) noexcept;
+	constexpr basic_json_slice& operator=(basic_json_slice const& rhs) noexcept = default;
+	constexpr basic_json_slice& operator=(basic_json_slice&& rhs) noexcept = default;
+	constexpr explicit operator boolean_t() const;
+	constexpr explicit operator number_t() const;
+	constexpr explicit operator nulljson_t() const;
+	constexpr explicit operator string_type&() const&;
+	constexpr explicit operator array_type&() const&;
+	constexpr explicit operator object_type&() const&;
+	constexpr explicit operator integer_t() const
+		requires(HasInteger);
+	constexpr explicit operator uinteger_t() const
+		requires(HasUInteger);
+	constexpr basic_json_slice operator[](key_string_t const& k) const;
+	template <typename KeyStrLike>
+		requires std::convertible_to<KeyStrLike, key_string_t> || std::convertible_to<key_string_t, KeyStrLike>;
+	constexpr basic_json_slice operator[](KeyStrLike const& k) const;
+	constexpr basic_json_slice operator[](key_char_t* k) const;
+	constexpr basic_json_slice operator[](array_type::size_type pos) const noexcept;
+	constexpr basic_json_slice& operator=(string_type const& str);
+	constexpr basic_json_slice& operator=(string_type&& str);
+	constexpr basic_json_slice& operator=(char_t* str);
+	template <typename StrLike>
+		requires std::convertible_to<StrLike, string_type> || std::convertible_to<string_type, StrLike>;
+	constexpr basic_json_slice& operator=(StrLike const& str);
+	constexpr basic_json_slice& operator=(nulljson_t n);
+	constexpr basic_json_slice& operator=(bool b);
+	constexpr basic_json_slice& operator=(boolean_t b);
+		requires(!std::same_as<boolean_t, bool>);
+	constexpr basic_json_slice& operator=(number_t n);
+	template <std::floating_point T>
+		requires(sizeof(T) > sizeof(boolean_t));
+	constexpr basic_json_slice& operator=(T i);
+	constexpr basic_json_slice& operator=(integer_t i);
+	constexpr basic_json_slice& operator=(uinteger_t i);
+	template <std::signed_integral T>
+		requires(sizeof(T) > sizeof(boolean_t))
+	constexpr basic_json_slice& operator=(T i);
+	template <std::unsigned_integral T>
+		requires(sizeof(T) > sizeof(boolean_t));
+	constexpr basic_json_slice& operator=(T i);
+	constexpr basic_json_slice& operator=(json_t& j);
+	constexpr basic_json_slice& operator=(node_type& n);
+}
+
+template <typename Node = basic_json_node<>, typename String = std::string,
+	typename Array = std::vector<Node>,
+	typename Map = std::map<String, Node>,
+	bool HasInteger = true, bool HasUInteger = true>
+class basic_const_json_slice
+{
+	using node_type = Node;
+	using value_type = Node;
+	using object_type = Map;
+	using array_type = Array;
+	using string_type = String;
+	static inline constexpr bool has_integer = HasInteger;
+	static inline constexpr bool has_uinteger = HasUInteger;
+	[[nodiscard]] constexpr bool empty() const noexcept;
+	[[nodiscard]] constexpr bool string() const noexcept;
+	[[nodiscard]] constexpr bool null() const noexcept;
+	[[nodiscard]] constexpr bool boolean() const noexcept;
+	[[nodiscard]] constexpr bool number() const noexcept;
+	[[nodiscard]] constexpr bool object() const noexcept;
+	[[nodiscard]] constexpr bool array() const noexcept;
+	[[nodiscard]] constexpr bool integer() const noexcept
+		requires(HasInteger);
+	[[nodiscard]] constexpr bool uinteger() const noexcept
+		requires(HasUInteger);
+	constexpr void swap(basic_const_json_slice& rhs) noexcept
+	friend constexpr void swap(basic_const_json_slice& lhs, basic_const_json_slice& rhs) noexcept
+	constexpr basic_const_json_slice() noexcept = default;
+	constexpr basic_const_json_slice(basic_const_json_slice&& rhs) noexcept = default;
+	constexpr basic_const_json_slice(basic_const_json_slice const& rhs) noexcept = default;
+	constexpr basic_const_json_slice(json_t const& j) noexcept;
+	basic_const_json_slice(node_type const& n) noexcept;
+	constexpr basic_const_json_slice& operator=(basic_const_json_slice const& rhs) noexcept = default;
+	constexpr basic_const_json_slice& operator=(basic_const_json_slice&& rhs) noexcept = default;
+	constexpr explicit operator boolean_t() const;
+	constexpr explicit operator number_t() const;
+	constexpr explicit operator nulljson_t() const;
+	constexpr explicit operator const string_type&() const&;
+	constexpr explicit operator const array_type&() const&;
+	constexpr explicit operator const object_type&() const&;
+	constexpr explicit operator integer_t() const
+		requires(HasInteger);
+	constexpr explicit operator uinteger_t() const
+		requires(HasUInteger);
+	constexpr basic_const_json_slice operator[](key_string_t const& k) const;
+	template <typename KeyStrLike>
+		requires std::convertible_to<KeyStrLike, key_string_t> || std::convertible_to<key_string_t, KeyStrLike>;
+	constexpr basic_const_json_slice operator[](KeyStrLike const& k) const;
+	constexpr basic_const_json_slice operator[](key_char_t* k) const;
+	constexpr basic_const_json_slice operator[](array_type::size_type pos) const noexcept;
+	constexpr basic_const_json_slice(basic_json_slice<Node, String, Array, Map, HasInteger, HasUInteger> const& s);
+}
+```
