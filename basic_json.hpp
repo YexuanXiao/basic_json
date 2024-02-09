@@ -522,6 +522,13 @@ namespace bizwen
 			return *this;
 		}
 
+		template <std::floating_point T>
+		    requires(sizeof(T) > sizeof(boolean_t))
+		constexpr basic_json_slice& operator=(T i)
+		{
+			return *this = number_t{ i };
+		}
+
 		constexpr basic_json_slice& operator=(integer_t i)
 		{
 			bool is_number = number() || uinteger() || integer();
@@ -548,6 +555,20 @@ namespace bizwen
 			(*json_).kind(kind_t::uinteger);
 
 			return *this;
+		}
+
+		template <std::signed_integral T>
+		    requires(sizeof(T) > sizeof(boolean_t))
+		constexpr basic_json_slice& operator=(T i)
+		{
+			return *this = integer_t{ i };
+		}
+
+		template <std::unsigned_integral T>
+		    requires(sizeof(T) > sizeof(boolean_t))
+		constexpr basic_json_slice& operator=(T i)
+		{
+			return *this = uinteger_t{ i };
 		}
 
 		constexpr basic_json_slice& operator=(json_t& j)
