@@ -140,6 +140,11 @@ namespace bizwen
 			return json_->stor_;
 		}
 
+		constexpr stor_t& stor() noexcept
+		{
+			return json_->stor_;
+		}
+
 	public:
 		[[nodiscard]] constexpr bool empty() const noexcept
 		{
@@ -232,7 +237,7 @@ namespace bizwen
 
 		// the cast has undefined behavior because it's derive-to-base
 		basic_json_slice(node_type& n) noexcept
-		    : json_(reinterpret_cast<json_t*>(const_cast<node_type*>(&n)))
+		    : json_(static_cast<json_t*>(&n))
 		{
 		}
 
@@ -392,8 +397,10 @@ namespace bizwen
 				typename json_t::template alloc_guard_<string_type> guard(*json_);
 				stor().str_ = new (guard.get()) string_type(str);
 				guard.release();
-				(*json_).kind(kind_t::string_type);
+				(*json_).kind(kind_t::string);
 			}
+
+			return *this;
 		}
 
 		constexpr basic_json_slice& operator=(string_type&& str)
@@ -413,8 +420,10 @@ namespace bizwen
 				typename json_t::template alloc_guard_<string_type> guard(*json_);
 				stor().str_ = new (guard.get()) string_type(std::move(str));
 				guard.release();
-				(*json_).kind(kind_t::string_type);
+				(*json_).kind(kind_t::string);
 			}
+
+			return *this;
 		}
 
 		constexpr basic_json_slice& operator=(char_t* str)
@@ -434,9 +443,12 @@ namespace bizwen
 				typename json_t::template alloc_guard_<string_type> guard(*json_);
 				stor().str_ = new (guard.get()) string_type(str);
 				guard.release();
-				(*json_).kind(kind_t::string_type);
+				(*json_).kind(kind_t::string);
 			}
+
+			return *this;
 		}
+
 		template <typename StrLike>
 		    requires std::convertible_to<StrLike, string_type> || std::convertible_to<string_type, StrLike>
 		constexpr basic_json_slice& operator=(StrLike const& str)
@@ -458,6 +470,8 @@ namespace bizwen
 			{
 				*static_cast<string_type*>(stor().str_) = str;
 			}
+
+			return *this;
 		}
 
 		constexpr basic_json_slice& operator=(nulljson_t n)
@@ -470,6 +484,8 @@ namespace bizwen
 
 			if (is_empty)
 				(*json_).kind(kind_t::null);
+
+			return *this;
 		}
 
 		constexpr basic_json_slice& operator=(bool b)
@@ -482,12 +498,14 @@ namespace bizwen
 
 			if (is_empty)
 				(*json_).kind(b ? kind_t::true_value : kind_t::false_value);
+
+			return *this;
 		}
 
 		constexpr basic_json_slice& operator=(boolean_t b)
 		    requires(!std::same_as<boolean_t, bool>)
 		{
-			*this = b;
+			return *this = b;
 		}
 
 		constexpr basic_json_slice& operator=(number_t n)
@@ -500,6 +518,8 @@ namespace bizwen
 
 			(*json_).stor().num_ = n;
 			(*json_).kind(kind_t::number);
+
+			return *this;
 		}
 
 		constexpr basic_json_slice& operator=(integer_t i)
@@ -512,6 +532,8 @@ namespace bizwen
 
 			(*json_).stor().int_ = i;
 			(*json_).kind(kind_t::integer);
+
+			return *this;
 		}
 
 		constexpr basic_json_slice& operator=(uinteger_t i)
@@ -524,16 +546,22 @@ namespace bizwen
 
 			(*json_).stor().uint_ = i;
 			(*json_).kind(kind_t::uinteger);
+
+			return *this;
 		}
 
 		constexpr basic_json_slice& operator=(json_t& j)
 		{
 			json_ = &j;
+
+			return *this;
 		}
 
 		constexpr basic_json_slice& operator=(node_type& n)
 		{
 			json_ = static_cast<json_t*>(&n);
+
+			return *this;
 		}
 	};
 
@@ -568,7 +596,7 @@ namespace bizwen
 		friend class basic_json<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
 		friend class basic_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
 
-		json_t* json_{};
+		json_t const* json_{};
 
 		constexpr kind_t kind() const noexcept
 		{
@@ -668,13 +696,13 @@ namespace bizwen
 		constexpr basic_const_json_slice(basic_const_json_slice const& rhs) noexcept = default;
 
 		constexpr basic_const_json_slice(json_t const& j) noexcept
-		    : json_(const_cast<json_t*>(&j))
+		    : json_(&j)
 		{
 		}
 
 		// the cast has undefined behavior because it's derive-to-base
 		basic_const_json_slice(node_type const& n) noexcept
-		    : json_(static_cast<json_t*>(const_cast<node_type*>(&n)))
+		    : json_(static_cast<json_t const*>(&n))
 		{
 		}
 
