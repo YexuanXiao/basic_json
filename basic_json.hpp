@@ -21,10 +21,10 @@ namespace bizwen
 	inline constexpr nulljson_t nulljson{ nullptr };
 
 	// https://cplusplus.github.io/LWG/issue3917
-	// since the types of string, array and map are not known at this point
-	// memory allocation can only be done by instantiating void
-	// requires allocator<void>, allocator<string>, allocator<map>,
-	// and allocator<array> satisfy DefaultConstructable and TrivialCopyable
+	// since the types of string, array and map are unknown at this point,
+	// memory allocation can only be done by instantiating void.
+	// This requires allocator<void>, allocator<string>, allocator<map>, and allocator<array>
+	// satisfy DefaultConstructable and TrivialCopyable.
 	template <typename Boolean = bool, typename Number = double,
 	    typename Integer = long long, typename UInteger = unsigned long long, typename Allocator = std::allocator<void>>
 	class json_node: protected Allocator
@@ -57,7 +57,7 @@ namespace bizwen
 			object
 		};
 
-		union stor_t_
+		union stor_t
 		{
 			void* str_;
 			void* arr_;
@@ -67,7 +67,7 @@ namespace bizwen
 			uinteger_type uint_;
 		};
 
-		stor_t_ stor_;
+		stor_t stor_;
 		kind_t kind_;
 
 	public:
@@ -95,37 +95,36 @@ namespace bizwen
 		using array_type = Array;
 		using string_type = String;
 
-		// span need to store HasInteger and has uinteger for deserializers
+		// spans need to store HasInteger and HasUInteger for deserializers
 		static inline constexpr bool has_integer = HasInteger;
 		static inline constexpr bool has_uinteger = HasUInteger;
 
 	private:
-		using kind_t = node_type::kind_t;
-		using number_t = node_type::number_t;
-		using boolean_t = node_type::boolean_t;
-		using integer_t = node_type::integer_t;
-		using uinteger_t = node_type::uinteger_t;
+		using json_t = basic_json<node_type, string_type, array_type, object_type, HasInteger, HasUInteger>;
+		using kind_t = json_t::kind_t;
+		using number_t = node_type::number_type;
+		using boolean_t = node_type::boolean_type;
+		using integer_t = node_type::integer_type;
+		using uinteger_t = node_type::uinteger_type;
 		using char_t = string_type::value_type;
 		using key_string_t = object_type::key_type;
 		using key_char_t = key_string_t::value_type;
+		using stor_t = json_t::stor_t;
 
-		using json_t = basic_json<node_type, string_type, array_type, object_type, HasInteger, HasUInteger>;
+		friend class basic_json<node_type, string_type, array_type, object_type, HasInteger, HasUInteger>;
 
 		json_t* json_{};
 
-		[[nodiscard]] constexpr kind_t kind() const noexcept
+		constexpr kind_t kind() const noexcept
 		{
-			return json_->node_.kind_;
+			assert(json_);
+
+			return json_->kind_;
 		}
 
-		[[nodiscard]] constexpr node_type::stor_t_& stor() noexcept
+		constexpr stor_t const& stor() const noexcept
 		{
-			return json_->node_.stor_;
-		}
-
-		[[nodiscard]] constexpr node_type::stor_t_ const& stor() const noexcept
-		{
-			return json_->node_.stor_;
+			return json_->stor_;
 		}
 
 	public:
@@ -148,7 +147,7 @@ namespace bizwen
 		{
 			auto k = kind();
 
-			return k == kind_t::true_value || kind_t::false_value;
+			return k == kind_t::true_value || k == kind_t::false_value;
 		}
 
 		[[nodiscard]] constexpr bool number() const noexcept
@@ -205,9 +204,13 @@ namespace bizwen
 			lhs.swap(rhs);
 		}
 
+		// similar to iterators, default construction is allowed, but except for operator=,
+		// operations on default-constructed span cause undefined behavior.
 		constexpr basic_const_json_span() noexcept = default;
 
 		constexpr basic_const_json_span(basic_const_json_span&& rhs) noexcept = default;
+
+		constexpr basic_const_json_span(basic_const_json_span const& rhs) noexcept = default;
 
 		constexpr basic_const_json_span(json_t& j) noexcept
 		    : json_(&j)
@@ -225,17 +228,21 @@ namespace bizwen
 		{
 		}
 
-		constexpr explicit operator boolean_t() const noexcept
+		constexpr basic_const_json_span& operator=(basic_const_json_span const& rhs) noexcept = default;
+
+		constexpr basic_const_json_span& operator=(basic_const_json_span&& rhs) noexcept = default;
+
+		constexpr explicit operator boolean_t() const
 		{
 			if (!boolean())
-				throw std::runtime_error("json_error: value not a boolean.");
+				throw std::runtime_error("json error: value not a boolean.");
 
 			auto k = kind();
 
 			return k == kind_t::true_value ? 1 : 0;
 		}
 
-		constexpr explicit operator number_t() const noexcept
+		constexpr explicit operator number_t() const
 		{
 			auto k = kind();
 			auto s = stor();
@@ -247,88 +254,89 @@ namespace bizwen
 			else if (k == kind_t::uinteger)
 				return s.uint_;
 
-			throw std::runtime_error("json_error:value isn't a number .");
+			throw std::runtime_error("json error: value isn't a number.");
 		}
 
-		constexpr explicit operator nulljson_t() const noexcept
+		constexpr explicit operator nulljson_t() const
 		{
 			if (!null())
-				throw std::runtime_error("json_error: value isn't a null.");
+				throw std::runtime_error("json error: value isn't a null.");
 
 			return nulljson;
 		}
 
-		constexpr explicit operator const string_type&() const& noexcept
+		constexpr explicit operator const string_type&() const&
 		{
 			if (!string())
-				throw std::runtime_error("json_error: value isn't a string.");
+				throw std::runtime_error("json error: value isn't a string.");
 
-			return *(json_->stor_.str_);
+			return *static_cast<string_type const*>(json_->stor_.str_);
 		}
 
-		constexpr explicit operator const array_type&() const& noexcept
+		constexpr explicit operator const array_type&() const&
 		{
 			if (!array())
-				throw std::runtime_error("json_error: value isn't an array.");
+				throw std::runtime_error("json error: value isn't an array.");
 
-			return *(json_->stor_.arr_);
+			return *static_cast<array_type const*>(json_->stor_.arr_);
 		}
 
-		constexpr explicit operator const object_type&() const& noexcept
+		constexpr explicit operator const object_type&() const&
 		{
 			if (!object())
-				throw std::runtime_error("json_error: value isn't an object.");
+				throw std::runtime_error("json error: value isn't an object.");
 
-			return *(json_->stor_.obj_);
+			return *static_cast<object_type const*>(json_->stor_.obj_);
 		}
 
-		constexpr explicit operator integer_t() const noexcept
+		constexpr explicit operator integer_t() const
 		    requires(HasInteger)
 		{
 			if (!integer())
-				throw std::runtime_error("json_error: value isn't an integer.");
+				throw std::runtime_error("json error: value isn't an integer.");
 
 			return json_->stor_.int_;
 		}
 
-		constexpr explicit operator uinteger_t() const noexcept
+		constexpr explicit operator uinteger_t() const
 		    requires(HasUInteger)
 		{
 			if (!uinteger())
-				throw std::runtime_error("json_error: value isn't an unsigned integer.");
+				throw std::runtime_error("json error: value isn't an unsigned integer.");
 
 			return json_->stor_.uint_;
 		}
 
-		constexpr basic_const_json_span operator[](key_string_t const& k)
+		constexpr basic_const_json_span operator[](key_string_t const& k) const
 		{
 			if (!object())
-				throw std::runtime_error("json_error: value isn't an object but is accessed using operator[].");
+				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
 
-			auto& o = *stor().obj_;
+			auto const& o = *static_cast<object_type const*>(stor().obj_);
 			auto i = o.find(k);
 
 			if (i == o.end())
 				throw std::runtime_error("key does not exist.");
 
-			auto&& [key, v] = *i;
+			auto const& [key, v] = *i;
 
 			return v;
 		}
 
-		template <std::convertible_to<key_string_t> KeyStrLike>
-		constexpr basic_const_json_span operator[](KeyStrLike const& k)
+		template <typename KeyStrLike>
+		    requires std::convertible_to<KeyStrLike, key_string_t> || std::convertible_to<key_string_t, KeyStrLike>
+		constexpr basic_const_json_span operator[](KeyStrLike const& k) const
 		{
 			if (!object())
-				throw std::runtime_error("json_error: value isn't an object but is accessed using operator[].");
+				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
 
-			auto& o = *stor().obj_;
+			auto const& o = *static_cast<object_type const*>(stor().obj_);
 			auto i = o.find(k);
 
 			if (i == o.end())
 				throw std::runtime_error("key does not exist.");
 
-			auto&& [_, v] = *i;
+			auto const& [_, v] = *i;
 
 			return v;
 		}
@@ -336,15 +344,15 @@ namespace bizwen
 		constexpr basic_const_json_span operator[](key_char_t* k) const
 		{
 			if (!object())
-				throw std::runtime_error("json_error: value isn't an object but is accessed using operator[].");
+				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
 
-			auto& o = *stor().obj_;
+			auto const& o = *static_cast<object_type const*>(stor().obj_);
 			auto i = o.find(k);
 
 			if (i == o.end())
 				throw std::runtime_error("key does not exist.");
 
-			auto&& [_, v] = *i;
+			auto const& [_, v] = *i;
 
 			return v;
 		}
@@ -352,9 +360,9 @@ namespace bizwen
 		constexpr basic_const_json_span operator[](array_type::size_type pos) const noexcept
 		{
 			if (!array())
-				throw std::runtime_error("json_error: value isn't an array but is accessed using operator[].");
+				throw std::runtime_error("json error: value isn't an array but is accessed using operator[].");
 
-			auto& a = *stor().arr_;
+			auto const& a = *static_cast<array_type const*>(stor().arr_);
 
 			return a[pos];
 		}
@@ -386,6 +394,9 @@ namespace bizwen
 		using allocator_t = node_type::allocator_type;
 		using traits_t = std::allocator_traits<allocator_t>;
 
+		using stor_t = node_type::stor_t;
+		friend class basic_const_json_span<node_type, string_type, array_type, object_type, HasInteger, HasUInteger>;
+
 		static_assert(std::integral<char_t>);
 		static_assert(std::integral<boolean_t>);
 		static_assert(std::integral<key_char_t>);
@@ -404,17 +415,17 @@ namespace bizwen
 
 		constexpr void kind(kind_t k) noexcept { (*this).kind_ = k; }
 
-		[[nodiscard]] constexpr kind_t kind() const noexcept
+		constexpr kind_t kind() const noexcept
 		{
 			return (*this).kind_;
 		}
 
-		[[nodiscard]] constexpr node_type::stor_t_& stor() noexcept
+		constexpr stor_t& stor() noexcept
 		{
 			return (*this).stor_;
 		}
 
-		[[nodiscard]] constexpr node_type::stor_t_ const& stor() const noexcept
+		constexpr stor_t const& stor() const noexcept
 		{
 			return (*this).stor_;
 		}
@@ -761,11 +772,22 @@ namespace bizwen
 			static_cast<node_type&>(*this) = std::move(n);
 		}
 
+		/* private inherit prevent this cast operator
 		constexpr operator node_type() && noexcept
+		{
+		    auto node = static_cast<node_type&>(*this);
+		    kind(kind_t{});
+		    stor() = decltype(stor()){};
+
+		    return node;
+		}
+		*/
+
+		[[nodiscard("discard nodes will cause leaks")]] constexpr node_type move_to_node() && noexcept
 		{
 			auto node = static_cast<node_type&>(*this);
 			kind(kind_t{});
-			stor() = decltype(stor()){};
+			stor() = std::remove_reference_t<decltype(stor())>{};
 
 			return node;
 		}
@@ -859,5 +881,6 @@ namespace bizwen
 	};
 
 	using json = basic_json<>;
+	using const_json_span = basic_const_json_span<>;
 
 } // namespace bizwen
