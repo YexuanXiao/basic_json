@@ -59,7 +59,8 @@ template <typename Node, typename String,
 class basic_json_slice;
 ```
 
-
+Design
+======
 
 Since JSON has a self-referential structure ([[RFC8259]]), type erasure techniques must be used, so basic_json_node is designed.
 
@@ -95,11 +96,11 @@ The triviality of basic_json_node depends on Allocator, if Allocator is trivial,
 
 Most of the member functions of basic_json are constructors, which make C++ values easily convertible to json. The destructor is responsible for destructing the entire object, basic_json also has copy constructor and copy assignment, as well as swap implemented by hidden friend and member functions.
 
-In addition, basic_json also has a function move_to_node, which can transfer memory from basic_json to basic_json_node, just like a pointer.
+In addition, basic_json also json has a right-value-qualified to node_type conversion function, which can transfer memory from basic_json to basic_json_node, just like a pointer.
 
 The most special point of my proposal is to expose basic_json_node, which allows users to implement their own serialization and deserialization functions in a non-intrusive way: if a basic_json object that stores a boolean or arithmetic type value is needed, then construct it directly through the constructor,
 if a basic_json object that stores an array or object type is needed, then users can construct array and object themselves, such as `std::vector<basic_json_node<>> a` and `std::map<std::string, basic_json_node> m`, then construct basic_json objects through the constructors of boolean or arithmetic types,
-and then insert them into the container, finally, move a or m to the constructor of json, and get a basic_json object that represents an array or map.
+and then insert them into the container, finally, move a or m to the constructor of basic_json, and get a basic_json object that represents an array or map.
 
 json_slice and const_json_slice are similar to iterator and const_iterator, const_json_slice is constructed from basic_json const& and holds a pointer to basic_json. All non-static functions of const_json_slice are const, and return a value or a reference to a const object.
 
@@ -339,11 +340,7 @@ public:
 Acknowledgements
 ======
 
-Thanks to A. Jiang for the information about the polymorphic allocator, and the suggestions for nullptr_t and constructor.
-
-References
-======
-
+Thanks to A. Jiang for the information about the polymorphic allocator, and the suggestions for nulljson_t and constructor.
 
 <pre class=biblio>
 {
