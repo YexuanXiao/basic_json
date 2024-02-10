@@ -13,13 +13,12 @@
 
 namespace bizwen
 {
-	class nulljson_t
+	struct nulljson_t
 	{
-	public:
-		explicit constexpr nulljson_t(decltype(nullptr)) {}
+		explicit constexpr nulljson_t() noexcept = default;
 	};
 
-	inline constexpr nulljson_t nulljson{ nullptr };
+	inline constexpr nulljson_t nulljson{};
 
 	template <typename Boolean = bool, typename Number = double,
 	    typename Integer = long long, typename UInteger = unsigned long long, typename Allocator = std::allocator<void>>
@@ -531,7 +530,8 @@ namespace bizwen
 			return *this = b;
 		}
 
-		constexpr basic_json_slice& operator=(number_t n)
+		template <std::floating_point T>
+		constexpr basic_json_slice& operator=(T n)
 		{
 			bool is_number = number() || uinteger() || integer();
 			bool is_empty = empty();
@@ -545,14 +545,9 @@ namespace bizwen
 			return *this;
 		}
 
-		template <std::floating_point T>
+		template <std::signed_integral T>
 		    requires(sizeof(T) > sizeof(boolean_t))
 		constexpr basic_json_slice& operator=(T i)
-		{
-			return *this = number_t{ i };
-		}
-
-		constexpr basic_json_slice& operator=(integer_t i)
 		{
 			bool is_number = number() || uinteger() || integer();
 			bool is_empty = empty();
@@ -566,7 +561,9 @@ namespace bizwen
 			return *this;
 		}
 
-		constexpr basic_json_slice& operator=(uinteger_t i)
+		template <std::unsigned_integral T>
+		    requires(sizeof(T) > sizeof(boolean_t))
+		constexpr basic_json_slice& operator=(T i)
 		{
 			bool is_number = number() || uinteger() || integer();
 			bool is_empty = empty();
@@ -578,20 +575,6 @@ namespace bizwen
 			(*json_).kind(kind_t::uinteger);
 
 			return *this;
-		}
-
-		template <std::signed_integral T>
-		    requires(sizeof(T) > sizeof(boolean_t))
-		constexpr basic_json_slice& operator=(T i)
-		{
-			return *this = integer_t{ i };
-		}
-
-		template <std::unsigned_integral T>
-		    requires(sizeof(T) > sizeof(boolean_t))
-		constexpr basic_json_slice& operator=(T i)
-		{
-			return *this = uinteger_t{ i };
 		}
 
 		constexpr basic_json_slice& operator=(json_t& j)
@@ -1208,12 +1191,6 @@ namespace bizwen
 			v ? kind(kind_t::true_value) : kind(kind_t::false_value);
 		}
 
-		constexpr basic_json(number_t v) noexcept
-		{
-			stor().num_ = v;
-			kind(kind_t::number);
-		}
-
 		template <std::floating_point T>
 		constexpr basic_json(T v) noexcept
 		{
@@ -1235,20 +1212,6 @@ namespace bizwen
 		{
 			stor().uint_ = v;
 			kind(kind_t::uinteger);
-		}
-
-		constexpr basic_json(integer_t v) noexcept
-		    requires HasInteger
-		{
-			stor().int_ = v;
-			kind(kind_t::integer);
-		}
-
-		constexpr basic_json(uinteger_t v) noexcept
-		    requires HasUInteger
-		{
-			stor().uint_ = v;
-			kind(kind_t::integer);
 		}
 
 		constexpr explicit basic_json(string_type v)

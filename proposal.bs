@@ -41,7 +41,7 @@ nulljson_t is a type similar to nullopt_t, used to indicate that the value of JS
 
 basic_json_node is a substitute for basic_json, providing storage space for basic_json in any situation where circular dependencies may occur.
 
-basica_json can be implemented as inheriting from basic_json_node, or storing a basic_json_node as a non-static data member, and basic_json does not have any other non-static data members, which makes basic_json and basic_json_node have the same size.
+basica_json can be implemented as storing a basic_json_node as a non-static data member, and does not have any other non-static data members, which makes basic_json and basic_json_node have the same size.
 
 basic_json_node has 5 template parameters, Boolean, Number, Integer, UInteger, Allocator, users can use these template parameters to customize their preferred types and allocators,
 
@@ -97,12 +97,13 @@ Appendix
 ======
 
 ```cpp
-class nulljson_t
+struct nulljson_t
 {
-public:
-	explicit constexpr nulljson_t(/* impl-defined*/) {}
+	explicit constexpr nulljson_t() noexcept = default;
 };
-inline constexpr nulljson_t nulljson{ /* impl-defined*/ };
+
+inline constexpr nulljson_t nulljson{};
+
 template <typename Boolean = bool, typename Number = double,
 	typename Integer = long long, typename UInteger = unsigned long long, typename Allocator = std::allocator<void>>
 class basic_json_node
@@ -118,6 +119,7 @@ public:
 	constexpr basic_json_node(basic_json_node&& rhs) noexcept = default;
 	constexpr basic_json_node& operator=(basic_json_node&& rhs) noexcept = default;
 }
+
 template <typename Node = basic_json_node<>, typename String = std::string,
 	typename Array = std::vector<Node>,
 	typename Map = std::map<String, Node>,
@@ -140,7 +142,6 @@ class basic_json
 	constexpr basic_json(boolean_t v) noexcept;
 	constexpr basic_json(bool v) noexcept;
 		requires(!std::same_as<bool, boolean_t>);
-	constexpr basic_json(number_t v) noexcept;
 	template <std::floating_point T>
 	constexpr basic_json(T v) noexcept;
 	template <std::signed_integral T>
@@ -149,10 +150,6 @@ class basic_json
 	template <std::unsigned_integral T>
 		requires(sizeof(T) > sizeof(boolean_t)) && HasUInteger
 	constexpr basic_json(T v) noexcept;
-	constexpr basic_json(integer_t v) noexcept
-		requires HasInteger;
-	constexpr basic_json(uinteger_t v) noexcept
-		requires HasUInteger;
 	constexpr explicit basic_json(string_type v);
 	constexpr basic_json(char_t const* begin, char_t const* end);
 	constexpr basic_json(char_t const* str, string_type::size_type count);
@@ -169,6 +166,7 @@ class basic_json
 	constexpr basic_const_json_slice<node_type, string_type, array_type, object_type, HasInteger, HasUInteger> slice() const;
 	
 }
+
 template <typename Node = basic_json_node<>, typename String = std::string,
 	typename Array = std::vector<Node>,
 	typename Map = std::map<String, Node>,
@@ -228,12 +226,8 @@ class basic_json_slice
 	constexpr basic_json_slice& operator=(bool b);
 	constexpr basic_json_slice& operator=(boolean_t b);
 		requires(!std::same_as<boolean_t, bool>);
-	constexpr basic_json_slice& operator=(number_t n);
 	template <std::floating_point T>
-		requires(sizeof(T) > sizeof(boolean_t));
 	constexpr basic_json_slice& operator=(T i);
-	constexpr basic_json_slice& operator=(integer_t i);
-	constexpr basic_json_slice& operator=(uinteger_t i);
 	template <std::signed_integral T>
 		requires(sizeof(T) > sizeof(boolean_t))
 	constexpr basic_json_slice& operator=(T i);
