@@ -43,20 +43,18 @@ basic_json_node is a substitute for basic_json, providing storage space for basi
 
 basica_json can be implemented as storing a basic_json_node as a non-static data member, and does not have any other non-static data members, which makes basic_json and basic_json_node have the same size.
 
-basic_json_node has 5 template parameters, Boolean, Number, Integer, UInteger, Allocator, users can use these template parameters to customize their preferred types and allocators,
+basic_json_node has 5 template parameters, Boolean, Number, Integer, UInteger, Allocator, users can use these template parameters to customize their preferred types and allocators.
 
-for example, some users may prefer to use fixed-length integer types, some users may prefer to use integer types provided by C++ keywords, and the same for floating-point types.
+For example, some users may prefer to use fixed-length integer types, some users may prefer to use integer types provided by C++ keywords, and the same for floating-point types.
 
 The reason why the allocator is a template parameter of basic_json_node rather than basic_json is that basic_json must have the same size as basic_json_node, so char is usually used to instantiate the allocator (void type can be used after LWG issue 3917 is resolved),
-
-and then rebind is used in the member functions of basic_json to allocate storage. Once a specialization of basic_json_node is available, basic_json can be instantiated.basic_json has 6 template parameters: Node, String, Array, Map, HasInteger, HasUInteger.
+and then rebind is used to allocate storage. Once a specialization of basic_json_node is available, basic_json can be instantiated.basic_json has 6 template parameters: Node, String, Array, Map, HasInteger, HasUInteger.
 
 Node must be a specialization of basic_json_node, and since basic_json_node provides type aliases to obtain the template arguments, basic_json can extract these type aliases, rewrite the specialization of basic_json_node, and compare it with Node to ensure this.
 
 basic_json_node usually holds an allocator, an enum that indicates the kind, and a union that stores boolean, number (floating point), integer, unsigned integer, string, array(vector), object(map).
 
 For arithmetic and boolean types, they are directly stored in the union, and since map and array store basic_json_node, pointers are needed to break the circular dependency,
-
 and since the two types are not determined when instantiating basic_json_node, they are actually void*. Conceptually, basic_json is a hybrid of container adapters and containers.
 
 Although string type does not have circular dependency problem, void* is also used to save the space. The relationship between basic_json and basic_json_node is shown in the following figure:
@@ -72,26 +70,22 @@ Most of the member functions of basic_json are constructors, which make C++ valu
 In addition, basic_json also has a function move_to_node, which can transfer memory from basic_json to basic_json_node, just like a pointer.
 
 The most special point of my proposal is to expose basic_json_node, which allows users to implement their own serialization and deserialization functions in a non-intrusive way: if a basic_json object that stores a boolean or arithmetic type value is needed, then construct it directly through the constructor,
-
 if a basic_json object that stores an array or object type is needed, then users can construct array and object themselves, such as `std::vector<basic_json_node<>> a` and `std::map<std::string, basic_json_node> m`, then construct basic_json objects through the constructors of boolean or arithmetic types,
-
 and then insert them into the container, finally, move a or m to the constructor of json, and get a basic_json object that represents an array or map.
 
-json_splice and const_json_splice are similar to iterator and const_iterator, const_json_splice is constructed from basic_json const& and holds a pointer to json. All functions of const_json_splice are const, and return a "value" or a reference to a const object.
+json_splice and const_json_splice are similar to iterator and const_iterator, const_json_splice is constructed from basic_json const& and holds a pointer to basic_json. All non-static functions of const_json_splice are const, and return a value or a reference to a const object.
 
-json_splice has all the member functions that const_json_splice has, and can be converted to const_json_splice. In addition, json_splice also has modifiers, which can modify the value without changing the type of the value stored by json.
+json_splice has all the member functions that const_json_splice has, and can be converted to const_json_splice. In addition, json_splice also has modifiers (overload of assignment operators), which can modify the value without changing the type of the value stored by json.
 
 json_splice is trivially copyable, so copying a json_splice has low overhead. Any operation on json_splice does not produce a copy of the basic_json object, and for subscript operations, json_splice always returns a new json_splice.
 
 This design makes the basic_json template independent of the specific vector type, map type, string type, and if the user likes, he can use std::map, std::flat_map, std::unordered_map,
-
-and the string type as the Key of the Object and the string type as the value can be different, which makes KeyString can be implemented with a dictionary that records all possible values. This design does not care whether the string type has char_traits and allocator,
-
+and the string type as the Key of the Object and the string type as the Value can be different, which makes KeyString can be implemented with a dictionary that records all possible values. This design does not care whether the string type has char_traits and allocator,
 and in extreme cases, this design allows both strings to be std::string_view, such as mapping the json byte stream to memory, each std::string_view references a part of the memory.
 
 This makes it possible to not copy any strings (but still need to use dynamic memory to store maps and arrays).
 
-I have not implemented any allocator-related functions, because I do not have much experience with allocators. I have not provided serialization and deserialization functions, because C++ currently does not have a good io api, and different users may have their own serialization and deserialization needs, so this is not part of the proposal. The design is completely feasible and stable, but I need some feedback to appropriately increase the usability of the library. I have provided a simple implementation on [Github](https://github.com/YexuanXiao/basic_json/blob/master/basic_json.hpp), the source code of the proposal is available in the same repository.
+I have not implemented any allocator-related functions, because I do not have much experience with allocators. I have not provided serialization and deserialization functions, because C++ currently does not have a good io api, and different users may have their own serialization and deserialization needs, so this is not part of the proposal. The design is completely feasible and stable, but I need some feedback to appropriately increase the usability of the library. I have provided a simple implementation on [Github](https://github.com/YexuanXiao/basic_json/blob/master/basic_json.hpp), the source code of the document is available in the same repository.
 
 Appendix
 ======
