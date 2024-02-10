@@ -133,6 +133,9 @@ class basic_json
 	friend constexpr void swap(basic_json& lhs, basic_json& rhs) noexcept;
 	constexpr basic_json() noexcept = default;
 	constexpr basic_json(basic_json&& rhs) noexcept;
+	constexpr basic_json(basic_json const& rhs);
+	constexpr basic_json& operator=(basic_json&& rhs);
+	constexpr basic_json& operator=(basic_json const& rhs);
 	constexpr basic_json(decltype(nullptr)) noexcept = delete;
 	constexpr basic_json(boolean_t v) noexcept;
 	constexpr basic_json(bool v) noexcept;
@@ -161,8 +164,6 @@ class basic_json
 	constexpr explicit basic_json(object_type obj);
 	constexpr explicit basic_json(node_type&& n) noexcept;
 	[[nodiscard("discard nodes will cause leaks")]] constexpr node_type move_to_node() && noexcept;
-	constexpr basic_json(const basic_json& rhs);
-	constexpr basic_json& operator=(const basic_json& rhs);
 	constexpr ~basic_json() noexcept;
 	constexpr basic_json_slice<node_type, string_type, array_type, object_type, HasInteger, HasUInteger> slice();
 	constexpr basic_const_json_slice<node_type, string_type, array_type, object_type, HasInteger, HasUInteger> slice() const;

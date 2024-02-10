@@ -1150,6 +1150,25 @@ namespace bizwen
 		{
 			rhs.swap(*this);
 		}
+		constexpr basic_json(basic_json const& rhs)
+		{
+			clone(rhs);
+		}
+
+		constexpr basic_json& operator=(basic_json const& rhs)
+		{
+			destroy();
+			clone(rhs);
+
+			return *this;
+		}
+
+		constexpr basic_json& operator=(basic_json&& rhs)
+		{
+			rhs.swap(*this);
+
+			return *this;
+		}
 
 		constexpr basic_json(decltype(nullptr)) noexcept = delete; // prevent implicit construct string
 
@@ -1365,19 +1384,6 @@ namespace bizwen
 		}
 
 	public:
-		constexpr basic_json(const basic_json& rhs)
-		{
-			clone(rhs);
-		}
-
-		constexpr basic_json& operator=(const basic_json& rhs)
-		{
-			destroy();
-			clone(rhs);
-
-			return *this;
-		}
-
 		constexpr ~basic_json() noexcept
 		{
 			destroy();
