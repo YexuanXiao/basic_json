@@ -29,7 +29,7 @@ int main()
 	j17.swap(j18);
 	j17 = j18;
 	std::swap(j17, j18);
-	bizwen::basic_json_node n = std::move(j18).move_to_node();
+	bizwen::basic_json_node<> n{std::move(j18)};
 	using cjs = bizwen::const_json_slice;
 	cjs c1;
 	c1.empty();
@@ -50,7 +50,7 @@ int main()
 	cjs c2{ j17 };
 	c2.swap(c1);
 	std::swap(c1, c2);
-	cjs c3{ n };
+	cjs c3{ bizwen::basic_json_node<>{} };
 	cjs c4 = c3;
 	cjs c5 = std::move(c4);
 	c4 = c5;

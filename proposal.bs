@@ -163,7 +163,7 @@ class basic_json
 	constexpr explicit basic_json(array_type arr);
 	constexpr explicit basic_json(object_type obj);
 	constexpr explicit basic_json(node_type&& n) noexcept;
-	[[nodiscard("discard nodes will cause leaks")]] constexpr node_type move_to_node() && noexcept;
+	[[nodiscard("discard nodes will cause leaks")]] constexpr operator node_type() && noexcept;
 	constexpr ~basic_json() noexcept;
 	constexpr basic_json_slice<node_type, string_type, array_type, object_type, HasInteger, HasUInteger> slice();
 	constexpr basic_const_json_slice<node_type, string_type, array_type, object_type, HasInteger, HasUInteger> slice() const;
