@@ -33,9 +33,37 @@ Proposal
 ========
 
 I propose to add a json header file and 5 classes (templates): nulljson_t, basic_json_node, basic_json, basic_const_json_splice, basic_json_splice.
-Since JSON has a self-referential structure, type erasure techniques must be used, so basic_json_node is designed.
 
-![JSON Value](https://www.json.org/img/value.png)
+```cpp
+struct nulljson_t;
+
+inline constexpr nulljson_t nulljson{};
+
+template <typename Boolean, typename Number,
+typename Integer, typename UInteger, typename Allocator>
+class basic_json_node;
+
+template <typename Node, typename String,
+typename Array, typename Map,
+bool HasInteger, bool HasUInteger>
+class basic_json;
+
+template <typename Node, typename String,
+typename Array, typename Map,
+bool HasInteger, bool HasUInteger>
+class basic_const_json_slice;
+
+template <typename Node, typename String,
+typename Array, typename Map,
+bool HasInteger, bool HasUInteger>
+class basic_json_slice;
+```
+
+
+
+Since JSON has a self-referential structure ([[RFC8259]]), type erasure techniques must be used, so basic_json_node is designed.
+
+<img src="https://www.json.org/img/value.png" width="500vw">
 
 nulljson_t is a type similar to nullopt_t, used to indicate that the value of JSON is null.
 
@@ -47,7 +75,7 @@ basic_json_node has 5 template parameters, Boolean, Number, Integer, UInteger, A
 
 For example, some users may prefer to use fixed-length integer types, some users may prefer to use integer types provided by C++ keywords, and the same for floating-point types.
 
-The reason why the allocator is a template parameter of basic_json_node rather than basic_json is that basic_json must have the same size as basic_json_node, so char is usually used to instantiate the allocator (void type can be used after LWG issue 3917 is resolved),
+The reason why the allocator is a template parameter of basic_json_node rather than basic_json is that basic_json must have the same size as basic_json_node, so char is usually used to instantiate the allocator (void type can be used after LWG issue [[3917]] is resolved),
 and then rebind is used to allocate storage. Once a specialization of basic_json_node is available, basic_json can be instantiated.basic_json has 6 template parameters: Node, String, Array, Map, HasInteger, HasUInteger.
 
 Node must be a specialization of basic_json_node, and since basic_json_node provides type aliases to obtain the template arguments, basic_json can extract these type aliases, rewrite the specialization of basic_json_node, and compare it with Node to ensure this.
@@ -59,7 +87,7 @@ and since the two types are not determined when instantiating basic_json_node, t
 
 Although string type does not have circular dependency problem, void* is also used to save the space. The relationship between basic_json and basic_json_node is shown in the following figure:
 
-![figure](https://github.com/YexuanXiao/basic_json/assets/20025591/2f59ef41-b2b9-42ff-a0b4-bddb50014797)
+<img src="https://raw.githubusercontent.com/YexuanXiao/basic_json/master/figure.png" width="500vw">
 
 Therefore, the Allocator template parameter of basic_json_node is not used directly, but is rebound to the allocators of string, array, and object. basic_json_node is conceptually similar to void*, it does not hold memory, but can transfer memory through it.
 
@@ -85,7 +113,14 @@ and in extreme cases, this design allows both strings to be std::string_view, su
 
 This makes it possible to not copy any strings (but still need to use dynamic memory to store maps and arrays).
 
-I have not implemented any allocator-related functions, because I do not have much experience with allocators. I have not provided serialization and deserialization functions, because C++ currently does not have a good io api, and different users may have their own serialization and deserialization needs, so this is not part of the proposal. The design is completely feasible and stable, but I need some feedback to appropriately increase the usability of the library. I have provided a simple implementation on [Github](https://github.com/YexuanXiao/basic_json/blob/master/basic_json.hpp), the source code of the document is available in the same repository.
+Implementation experience
+======
+
+I have provided a simple implementation on [Github](https://github.com/YexuanXiao/basic_json/blob/master/basic_json.hpp), the source code of the document is available in the same repository.
+
+I have not implemented any allocator-related functions, because I do not have much experience with allocators. I have not provided serialization and deserialization functions, because C++ currently does not have a good io api, and different users may have their own serialization and deserialization needs, so this is not part of the proposal.
+
+The design is feasible and stable, but I need some feedback to appropriately increase the usability of the library.
 
 Appendix
 ======
@@ -99,7 +134,7 @@ struct nulljson_t
 inline constexpr nulljson_t nulljson{};
 
 template <typename Boolean = bool, typename Number = double,
-	typename Integer = long long, typename UInteger = unsigned long long, typename Allocator = std::allocator<void>>
+	typename Integer = long long, typename UInteger = unsigned long long, typename Allocator = std::allocator<char>>
 class basic_json_node
 {
 public:
@@ -284,3 +319,33 @@ class basic_const_json_slice
 	constexpr basic_const_json_slice(basic_json_slice<Node, String, Array, Map, HasInteger, HasUInteger> const& s);
 }
 ```
+
+Acknowledgements
+======
+
+Thanks to A. Jiang for the information about the polymorphic allocator, and the suggestions for nullptr_t and constructor.
+
+References
+======
+
+
+<pre class=biblio>
+{
+"RFC8259": {
+	"title": "The JavaScript Object Notation (JSON) Data Interchange Format",
+	"authors": [
+		"IETF"
+	],
+	"href": "https://www.rfc-editor.org/rfc/rfc8259",
+	"date": "December 2017"
+	},
+"3917": {
+	"title": "Validity of allocator<void> and possibly polymorphic_allocator<void> should be clarified",
+	"authors": [
+		"Daniel Krügler"
+	],
+	"href": "https://cplusplus.github.io/LWG/issue3917",
+	"date": "April 2023"
+	}
+}
+</pre>
