@@ -134,7 +134,7 @@ namespace bizwen
 		static inline constexpr bool has_uinteger = HasUInteger;
 
 	private:
-		using json_t = basic_json<node_type, string_type, array_type, object_type, HasInteger, HasUInteger>;
+		using json_t = basic_json<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
 		using kind_t = json_t::kind_t;
 		using number_t = node_type::number_type;
 		using boolean_t = node_type::boolean_type;
@@ -144,6 +144,8 @@ namespace bizwen
 		using key_string_t = object_type::key_type;
 		using key_char_t = key_string_t::value_type;
 		using stor_t = json_t::stor_t;
+
+		using const_slice_type = basic_const_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
 
 		friend class basic_json<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
 		friend class basic_const_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
@@ -546,7 +548,7 @@ namespace bizwen
 		}
 
 		template <std::signed_integral T>
-		    requires(sizeof(T) > sizeof(boolean_t))
+		    requires(sizeof(T) > sizeof(boolean_t)) && HasInteger
 		constexpr basic_json_slice& operator=(T i)
 		{
 			bool is_number = number() || uinteger() || integer();
@@ -562,7 +564,7 @@ namespace bizwen
 		}
 
 		template <std::unsigned_integral T>
-		    requires(sizeof(T) > sizeof(boolean_t))
+		    requires(sizeof(T) > sizeof(boolean_t)) && HasUInteger
 		constexpr basic_json_slice& operator=(T i)
 		{
 			bool is_number = number() || uinteger() || integer();
@@ -604,12 +606,11 @@ namespace bizwen
 		using array_type = Array;
 		using string_type = String;
 
-		// slices need to store HasInteger and HasUInteger for deserializers
 		static inline constexpr bool has_integer = HasInteger;
 		static inline constexpr bool has_uinteger = HasUInteger;
 
 	private:
-		using json_t = basic_json<node_type, string_type, array_type, object_type, HasInteger, HasUInteger>;
+		using json_t = basic_json<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
 		using kind_t = json_t::kind_t;
 		using number_t = node_type::number_type;
 		using boolean_t = node_type::boolean_type;
@@ -619,6 +620,8 @@ namespace bizwen
 		using key_string_t = object_type::key_type;
 		using key_char_t = key_string_t::value_type;
 		using stor_t = json_t::stor_t;
+
+		using slice_type = basic_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
 
 		friend class basic_json<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
 		friend class basic_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
@@ -872,7 +875,7 @@ namespace bizwen
 			return a[pos];
 		}
 
-		constexpr basic_const_json_slice(basic_json_slice<Node, String, Array, Map, HasInteger, HasUInteger> const& s)
+		constexpr basic_const_json_slice(slice_type const& s)
 		{
 			json_ = s.json_;
 		}
@@ -889,6 +892,11 @@ namespace bizwen
 		using value_type = Node;
 		using array_type = Array;
 		using string_type = String;
+		using slice_type = basic_json_slice<node_type, string_type, array_type, object_type, HasInteger, HasUInteger>;
+		using const_slice_type = basic_const_json_slice<node_type, string_type, array_type, object_type, HasInteger, HasUInteger>;
+
+		static inline constexpr bool has_integer = HasInteger;
+		static inline constexpr bool has_uinteger = HasUInteger;
 
 	private:
 		using kind_t = node_type::kind_t;
@@ -904,8 +912,8 @@ namespace bizwen
 		using traits_t = std::allocator_traits<allocator_t>;
 
 		using stor_t = node_type::stor_t;
-		friend class basic_const_json_slice<node_type, string_type, array_type, object_type, HasInteger, HasUInteger>;
-		friend class basic_json_slice<node_type, string_type, array_type, object_type, HasInteger, HasUInteger>;
+		friend class basic_const_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
+		friend class basic_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
 
 		static_assert(std::integral<char_t>);
 		static_assert(std::integral<boolean_t>);
@@ -1366,12 +1374,12 @@ namespace bizwen
 			destroy();
 		}
 
-		constexpr basic_json_slice<node_type, string_type, array_type, object_type, HasInteger, HasUInteger> slice()
+		constexpr slice_type slice()
 		{
 			return *this;
 		}
 
-		constexpr basic_const_json_slice<node_type, string_type, array_type, object_type, HasInteger, HasUInteger> slice() const
+		constexpr const_slice_type slice() const
 		{
 			return *this;
 		}
