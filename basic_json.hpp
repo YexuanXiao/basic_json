@@ -1368,49 +1368,19 @@ namespace bizwen
 			return *this;
 		}
 
-		template <std::integral... Args>
-		static constexpr basic_json array(Args... args)
+		template <typename... Args>
+		    requires(std::constructible_from<basic_json, Args> && ...)
+		static constexpr basic_json array(Args&&... args)
 		{
 			array_type arr;
 			arr.reserve(sizeof...(Args));
-			(arr.push_back(basic_json(args)), ...);
-
-			return arr;
-		}
-
-		template <std::floating_point... Args>
-		static constexpr basic_json array(Args... args)
-		{
-			array_type arr;
-			arr.reserve(sizeof...(Args));
-			(arr.push_back(basic_json(args)), ...);
-
-			return arr;
-		}
-
-		template <std::same_as<bool>... Args>
-		static constexpr basic_json array(Args... args)
-		{
-			array_type arr;
-			arr.reserve(sizeof...(Args));
-			(arr.push_back(basic_json(args)), ...);
-
-			return arr;
-		}
-
-		template <typename... StrLike>
-		static constexpr basic_json array(StrLike&&... args)
-		    requires(std::constructible_from<string_type, StrLike> && ...)
-		{
-			array_type arr;
-			arr.reserve(sizeof...(StrLike));
-			(arr.push_back(basic_json(std::forward<StrLike>(args))), ...);
+			(arr.push_back(basic_json(std::forward<Args>(args))), ...);
 
 			return arr;
 		}
 
 		template <typename... Args>
-		    requires(std::same_as<typename object_type::value_type, std::decay_t<Args>> && ...)
+		    requires(std::same_as<std::decay_t<Args>, typename object_type::value_type> && ...)
 		static constexpr basic_json object(Args&&... args)
 		{
 			object_type obj;

@@ -259,7 +259,7 @@ struct nulljson_t
 	explicit constexpr nulljson_t() noexcept = default;
 };
 
-inline constexpr nulljson_t nulljson{};
+inline constexpr nulljson_t nulljson;
 
 template <typename Number = double,
 	typename Integer = long long, typename UInteger = unsigned long long,
@@ -331,15 +331,9 @@ public:
 	constexpr ~basic_json() noexcept;
 	constexpr slice_type slice();
 	constexpr const_slice_type slice() const;
-	template <std::integral... Args>
-	static constexpr basic_json array(Args... args);
-	template <std::floating_point... Args>
-	static constexpr basic_json array(Args... args);
-	template <std::same_as<bool>... Args>
-	static constexpr basic_json array(Args... args);
-	template <typename... StrLike>
-	static constexpr basic_json array(StrLike&&... args)
-	    requires(std::constructible_from<string_type, StrLike> && ...);
+	template <typename... Args>
+	    requires(std::constructible_from<basic_json, Args> && ...)
+	static constexpr basic_json array(Args&&... args);
 	template <typename... Args>
 	    requires(std::same_as<typename object_type::value_type, std::decay_t<Args>> && ...)
 	static constexpr basic_json object(Args&&... args);
