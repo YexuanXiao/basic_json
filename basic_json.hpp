@@ -20,7 +20,7 @@ namespace bizwen
 
 	inline constexpr nulljson_t nulljson{};
 
-	template <typename Boolean = bool, typename Number = double,
+	template <typename Number = double,
 	    typename Integer = long long, typename UInteger = unsigned long long, typename Allocator = std::allocator<void>>
 	class basic_json_node;
 
@@ -47,19 +47,17 @@ namespace bizwen
 	// memory allocation can only be done by instantiating void.
 	// This requires allocator<void>, allocator<string>, allocator<map>, and allocator<array>
 	// satisfy DefaultConstructable and TrivialCopyable.
-	template <typename Boolean, typename Number,
+	template <typename Number,
 	    typename Integer, typename UInteger, typename Allocator>
 	class basic_json_node: protected Allocator
 	{
 	public:
 		using number_type = Number;
-		using boolean_type = Boolean;
 		using integer_type = Integer;
 		using uinteger_type = UInteger;
 		using allocator_type = Allocator;
 
 	private:
-		static_assert(std::integral<boolean_type>);
 		static_assert(std::floating_point<number_type>);
 		static_assert(std::signed_integral<integer_type>);
 		static_assert(std::unsigned_integral<uinteger_type>);
@@ -135,9 +133,8 @@ namespace bizwen
 		using slice_type = basic_json_slice;
 		using const_json_slice = basic_const_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
 		using json_type = basic_json<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
-		
+
 		using number_type = node_type::number_type;
-		using boolean_type = node_type::boolean_type;
 		using integer_type = node_type::integer_type;
 		using uinteger_type = node_type::uinteger_type;
 
@@ -273,7 +270,7 @@ namespace bizwen
 
 		constexpr basic_json_slice& operator=(basic_json_slice&& rhs) noexcept = default;
 
-		constexpr explicit operator boolean_type() const
+		constexpr explicit operator bool() const
 		{
 			if (!boolean())
 				throw std::runtime_error("json error: value isn't a boolean.");
@@ -530,12 +527,6 @@ namespace bizwen
 			return *this;
 		}
 
-		constexpr basic_json_slice& operator=(boolean_type b)
-		    requires(!std::same_as<boolean_type, bool>)
-		{
-			return *this = b;
-		}
-
 		template <std::floating_point T>
 		constexpr basic_json_slice& operator=(T n)
 		{
@@ -552,7 +543,7 @@ namespace bizwen
 		}
 
 		template <std::signed_integral T>
-		    requires(sizeof(T) > sizeof(boolean_type)) && HasInteger
+		    requires HasInteger
 		constexpr basic_json_slice& operator=(T i)
 		{
 			bool is_number = number() || uinteger() || integer();
@@ -568,7 +559,7 @@ namespace bizwen
 		}
 
 		template <std::unsigned_integral T>
-		    requires(sizeof(T) > sizeof(boolean_type)) && HasUInteger
+		    requires HasUInteger
 		constexpr basic_json_slice& operator=(T i)
 		{
 			bool is_number = number() || uinteger() || integer();
@@ -617,9 +608,8 @@ namespace bizwen
 		using slice_type = basic_json_slice<node_type, string_type, array_type, object_type, HasInteger, HasUInteger>;
 		using const_slice_type = basic_const_json_slice;
 		using json_type = basic_json<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
-		
+
 		using number_type = node_type::number_type;
-		using boolean_type = node_type::boolean_type;
 		using integer_type = node_type::integer_type;
 		using uinteger_type = node_type::uinteger_type;
 
@@ -751,7 +741,7 @@ namespace bizwen
 
 		constexpr basic_const_json_slice& operator=(basic_const_json_slice&& rhs) noexcept = default;
 
-		constexpr explicit operator boolean_type() const
+		constexpr explicit operator bool() const
 		{
 			if (!boolean())
 				throw std::runtime_error("json error: value not a boolean.");
@@ -912,7 +902,6 @@ namespace bizwen
 		using const_slice_type = basic_const_json_slice<node_type, string_type, array_type, object_type, HasInteger, HasUInteger>;
 
 		using number_type = node_type::number_type;
-		using boolean_type = node_type::boolean_type;
 		using integer_type = node_type::integer_type;
 		using uinteger_type = node_type::uinteger_type;
 
@@ -931,12 +920,10 @@ namespace bizwen
 		friend class basic_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
 
 		static_assert(std::integral<char_type>);
-		static_assert(std::integral<boolean_type>);
 		static_assert(std::integral<key_char_type>);
 		static_assert(std::floating_point<number_type>);
 		static_assert(std::signed_integral<integer_type>);
 		static_assert(std::unsigned_integral<uinteger_type>);
-		static_assert(sizeof(boolean_type) < sizeof(integer_type));
 		static_assert(sizeof(integer_type) == sizeof(uinteger_type));
 		static_assert(std::same_as<node_type, typename array_type::value_type>);
 		static_assert(std::same_as<node_type, typename object_type::mapped_type>);
@@ -944,7 +931,7 @@ namespace bizwen
 		static_assert(std::random_access_iterator<typename string_type::iterator>);
 		static_assert(std::bidirectional_iterator<typename object_type::iterator>);
 		static_assert(std::random_access_iterator<typename key_string_type::iterator>);
-		static_assert(std::same_as<basic_json_node<boolean_type, number_type, integer_type, uinteger_type>, node_type>);
+		static_assert(std::same_as<basic_json_node<number_type, integer_type, uinteger_type>, node_type>);
 
 		node_type node_;
 
@@ -1203,13 +1190,7 @@ namespace bizwen
 
 		constexpr basic_json(decltype(nullptr)) noexcept = delete; // prevent implicit construct string
 
-		constexpr basic_json(boolean_type v) noexcept
-		{
-			v ? kind(kind_t::true_value) : kind(kind_t::false_value);
-		}
-
 		constexpr basic_json(bool v) noexcept
-		    requires(!std::same_as<bool, boolean_type>)
 		{
 			v ? kind(kind_t::true_value) : kind(kind_t::false_value);
 		}
@@ -1222,7 +1203,7 @@ namespace bizwen
 		}
 
 		template <std::signed_integral T>
-		    requires(sizeof(T) > sizeof(boolean_type)) && HasInteger
+		    requires HasInteger
 		constexpr basic_json(T v) noexcept
 		{
 			stor().int_ = v;
@@ -1230,7 +1211,7 @@ namespace bizwen
 		}
 
 		template <std::unsigned_integral T>
-		    requires(sizeof(T) > sizeof(boolean_type)) && HasUInteger
+		    requires  HasUInteger
 		constexpr basic_json(T v) noexcept
 		{
 			stor().uint_ = v;
@@ -1400,7 +1381,6 @@ namespace bizwen
 		}
 
 		template <std::integral... Args>
-		    requires(sizeof...(Args) > sizeof(boolean_type))
 		static constexpr basic_json array(Args... args)
 		{
 			array_type arr;
@@ -1421,16 +1401,6 @@ namespace bizwen
 		}
 
 		template <std::same_as<bool>... Args>
-		static constexpr basic_json array(Args... args)
-		{
-			array_type arr;
-			arr.reserve(sizeof...(Args));
-			(arr.push_back(basic_json(args)), ...);
-
-			return arr;
-		}
-
-		template <std::same_as<boolean_type>... Args>
 		static constexpr basic_json array(Args... args)
 		{
 			array_type arr;
