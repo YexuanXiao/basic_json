@@ -259,9 +259,8 @@ namespace bizwen
 		{
 		}
 
-		// the cast has undefined behavior because it's derive-to-base
-		basic_json_slice(node_type& n) noexcept
-		    : json_(static_cast<json_t*>(&n))
+		constexpr basic_json_slice(node_type& n) noexcept
+		    : json_(reinterpret_cast<json_t*>(&n))
 		{
 		}
 
@@ -272,7 +271,7 @@ namespace bizwen
 		constexpr explicit operator boolean_t() const
 		{
 			if (!boolean())
-				throw std::runtime_error("json error: value not a boolean.");
+				throw std::runtime_error("json error: value isn't a boolean.");
 
 			auto k = kind();
 
@@ -297,7 +296,7 @@ namespace bizwen
 		constexpr explicit operator nulljson_t() const
 		{
 			if (!null())
-				throw std::runtime_error("json error: value isn't a null.");
+				throw std::runtime_error("json error: value isn't null.");
 
 			return nulljson;
 		}
@@ -731,7 +730,7 @@ namespace bizwen
 		}
 
 		// the cast has undefined behavior because it's derive-to-base
-		basic_const_json_slice(node_type const& n) noexcept
+		constexpr basic_const_json_slice(node_type const& n) noexcept
 		    : json_(reinterpret_cast<json_t const*>(&n))
 		{
 		}
