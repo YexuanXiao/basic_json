@@ -398,7 +398,7 @@ public:
 		requires transparent_comparable<KeyStrLike, key_string_t>;
 	constexpr basic_json_slice operator[](KeyStrLike const& k) const;
 	constexpr basic_json_slice operator[](key_char_t* k) const;
-	constexpr basic_json_slice operator[](array_type::size_type pos) const noexcept;
+	constexpr basic_json_slice operator[](array_type::size_type pos) const;
 	constexpr basic_json_slice& operator=(string_type const& str);
 	constexpr basic_json_slice& operator=(string_type&& str);
 	constexpr basic_json_slice& operator=(char_t* str);
@@ -478,7 +478,7 @@ public:
 		requires transparent_comparable<KeyStrLike, key_string_t>;
 	constexpr basic_const_json_slice operator[](KeyStrLike const& k) const;
 	constexpr basic_const_json_slice operator[](key_char_t* k) const;
-	constexpr basic_const_json_slice operator[](array_type::size_type pos) const noexcept;
+	constexpr basic_const_json_slice operator[](array_type::size_type pos) const;
 	constexpr basic_const_json_slice(slice_type const& s);
 }
 ```

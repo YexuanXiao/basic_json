@@ -59,7 +59,6 @@ namespace bizwen
 		static_assert(std::floating_point<number_type>);
 		static_assert(std::signed_integral<integer_type>);
 		static_assert(std::unsigned_integral<uinteger_type>);
-		static_assert(std::same_as<void, typename allocator_type::value_type>);
 
 		template <typename Node, typename String,
 		    typename Array,
@@ -393,7 +392,7 @@ namespace bizwen
 			return v;
 		}
 
-		constexpr basic_json_slice operator[](array_type::size_type pos) const noexcept
+		constexpr basic_json_slice operator[](array_type::size_type pos) const
 		{
 			if (!array())
 				throw std::runtime_error("json error: value isn't an array but is accessed using operator[].");
@@ -720,7 +719,6 @@ namespace bizwen
 		{
 		}
 
-		// the cast has undefined behavior because it's derive-to-base
 		constexpr basic_const_json_slice(node_type const& n) noexcept
 		    : json_(reinterpret_cast<json_type const*>(&n))
 		{
@@ -855,7 +853,7 @@ namespace bizwen
 			return v;
 		}
 
-		constexpr basic_const_json_slice operator[](array_type::size_type pos) const noexcept
+		constexpr basic_const_json_slice operator[](array_type::size_type pos) const
 		{
 			if (!array())
 				throw std::runtime_error("json error: value isn't an array but is accessed using operator[].");
