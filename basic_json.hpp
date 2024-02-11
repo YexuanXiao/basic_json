@@ -58,6 +58,7 @@ namespace bizwen
 		using uinteger_type = UInteger;
 		using allocator_type = Allocator;
 
+	private:
 		static_assert(std::integral<boolean_type>);
 		static_assert(std::floating_point<number_type>);
 		static_assert(std::signed_integral<integer_type>);
@@ -82,7 +83,6 @@ namespace bizwen
 		    bool HasInteger, bool HasUInteger>
 		friend class basic_json_slice;
 
-	private:
 		enum class kind_t : unsigned char
 		{
 			empty,
@@ -123,6 +123,7 @@ namespace bizwen
 	    bool HasInteger, bool HasUInteger>
 	class basic_json_slice
 	{
+	public:
 		using node_type = Node;
 		using value_type = Node;
 		using object_type = Map;
@@ -133,9 +134,11 @@ namespace bizwen
 		static inline constexpr bool has_integer = HasInteger;
 		static inline constexpr bool has_uinteger = HasUInteger;
 
+		using json_type = basic_json<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
+		using const_slice_type = basic_const_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
+
 	private:
-		using json_t = basic_json<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
-		using kind_t = json_t::kind_t;
+		using kind_t = json_type::kind_t;
 		using number_t = node_type::number_type;
 		using boolean_t = node_type::boolean_type;
 		using integer_t = node_type::integer_type;
@@ -143,14 +146,12 @@ namespace bizwen
 		using char_t = string_type::value_type;
 		using key_string_t = object_type::key_type;
 		using key_char_t = key_string_t::value_type;
-		using stor_t = json_t::stor_t;
-
-		using const_slice_type = basic_const_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
+		using stor_t = json_type::stor_t;
 
 		friend class basic_json<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
 		friend class basic_const_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
 
-		json_t* json_{};
+		json_type* json_{};
 
 		constexpr kind_t kind() const noexcept
 		{
@@ -254,13 +255,13 @@ namespace bizwen
 
 		constexpr basic_json_slice(basic_json_slice const& rhs) noexcept = default;
 
-		constexpr basic_json_slice(json_t& j) noexcept
+		constexpr basic_json_slice(json_type& j) noexcept
 		    : json_(&j)
 		{
 		}
 
 		constexpr basic_json_slice(node_type& n) noexcept
-		    : json_(reinterpret_cast<json_t*>(&n))
+		    : json_(reinterpret_cast<json_type*>(&n))
 		{
 		}
 
@@ -417,7 +418,7 @@ namespace bizwen
 			}
 			else // empty
 			{
-				typename json_t::template alloc_guard_<string_type> guard(*json_);
+				typename json_type::template alloc_guard_<string_type> guard(*json_);
 				stor().str_ = new (guard.get()) string_type(str);
 				guard.release();
 				(*json_).kind(kind_t::string);
@@ -440,7 +441,7 @@ namespace bizwen
 			}
 			else // empty
 			{
-				typename json_t::template alloc_guard_<string_type> guard(*json_);
+				typename json_type::template alloc_guard_<string_type> guard(*json_);
 				stor().str_ = new (guard.get()) string_type(std::move(str));
 				guard.release();
 				(*json_).kind(kind_t::string);
@@ -463,7 +464,7 @@ namespace bizwen
 			}
 			else // empty
 			{
-				typename json_t::template alloc_guard_<string_type> guard(*json_);
+				typename json_type::template alloc_guard_<string_type> guard(*json_);
 				stor().str_ = new (guard.get()) string_type(str);
 				guard.release();
 				(*json_).kind(kind_t::string);
@@ -484,7 +485,7 @@ namespace bizwen
 
 			if (is_empty)
 			{
-				typename json_t::template alloc_guard_<string_type> guard(*json_);
+				typename json_type::template alloc_guard_<string_type> guard(*json_);
 				stor().str_ = new (guard.get()) string_type(str);
 				guard.release();
 				(*json_).kind(kind_t::string);
@@ -578,7 +579,7 @@ namespace bizwen
 			return *this;
 		}
 
-		constexpr basic_json_slice& operator=(json_t& j)
+		constexpr basic_json_slice& operator=(json_type& j)
 		{
 			json_ = &j;
 
@@ -587,7 +588,7 @@ namespace bizwen
 
 		constexpr basic_json_slice& operator=(node_type& n)
 		{
-			json_ = reinterpret_cast<json_t*>(&n);
+			json_ = reinterpret_cast<json_type*>(&n);
 
 			return *this;
 		}
@@ -599,6 +600,7 @@ namespace bizwen
 	    bool HasInteger, bool HasUInteger>
 	class basic_const_json_slice
 	{
+	public:
 		using node_type = Node;
 		using value_type = Node;
 		using object_type = Map;
@@ -608,9 +610,11 @@ namespace bizwen
 		static inline constexpr bool has_integer = HasInteger;
 		static inline constexpr bool has_uinteger = HasUInteger;
 
+		using json_type = basic_json<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
+		using slice_type = basic_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
+
 	private:
-		using json_t = basic_json<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
-		using kind_t = json_t::kind_t;
+		using kind_t = json_type::kind_t;
 		using number_t = node_type::number_type;
 		using boolean_t = node_type::boolean_type;
 		using integer_t = node_type::integer_type;
@@ -618,14 +622,12 @@ namespace bizwen
 		using char_t = string_type::value_type;
 		using key_string_t = object_type::key_type;
 		using key_char_t = key_string_t::value_type;
-		using stor_t = json_t::stor_t;
-
-		using slice_type = basic_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
+		using stor_t = json_type::stor_t;
 
 		friend class basic_json<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
 		friend class basic_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
 
-		json_t const* json_{};
+		json_type const* json_{};
 
 		constexpr kind_t kind() const noexcept
 		{
@@ -724,14 +726,14 @@ namespace bizwen
 
 		constexpr basic_const_json_slice(basic_const_json_slice const& rhs) noexcept = default;
 
-		constexpr basic_const_json_slice(json_t const& j) noexcept
+		constexpr basic_const_json_slice(json_type const& j) noexcept
 		    : json_(&j)
 		{
 		}
 
 		// the cast has undefined behavior because it's derive-to-base
 		constexpr basic_const_json_slice(node_type const& n) noexcept
-		    : json_(reinterpret_cast<json_t const*>(&n))
+		    : json_(reinterpret_cast<json_type const*>(&n))
 		{
 		}
 
@@ -886,16 +888,18 @@ namespace bizwen
 	    bool HasInteger, bool HasUInteger>
 	class basic_json
 	{
+	public:
 		using node_type = Node;
 		using object_type = Map;
 		using value_type = Node;
 		using array_type = Array;
 		using string_type = String;
-		using slice_type = basic_json_slice<node_type, string_type, array_type, object_type, HasInteger, HasUInteger>;
-		using const_slice_type = basic_const_json_slice<node_type, string_type, array_type, object_type, HasInteger, HasUInteger>;
 
 		static inline constexpr bool has_integer = HasInteger;
 		static inline constexpr bool has_uinteger = HasUInteger;
+
+		using slice_type = basic_json_slice<node_type, string_type, array_type, object_type, HasInteger, HasUInteger>;
+		using const_slice_type = basic_const_json_slice<node_type, string_type, array_type, object_type, HasInteger, HasUInteger>;
 
 	private:
 		using kind_t = node_type::kind_t;
@@ -906,11 +910,10 @@ namespace bizwen
 		using char_t = string_type::value_type;
 		using key_string_t = object_type::key_type;
 		using key_char_t = key_string_t::value_type;
-
 		using allocator_t = node_type::allocator_type;
 		using traits_t = std::allocator_traits<allocator_t>;
-
 		using stor_t = node_type::stor_t;
+
 		friend class basic_const_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
 		friend class basic_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
 
@@ -1385,7 +1388,6 @@ namespace bizwen
 	};
 
 	using json = basic_json<>;
-	using const_json_slice = basic_const_json_slice<>;
 	using json_slice = basic_json_slice<>;
-
+	using const_json_slice = basic_const_json_slice<>;
 } // namespace bizwen
