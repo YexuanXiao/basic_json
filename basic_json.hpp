@@ -225,13 +225,13 @@ namespace bizwen
 		}
 
 		[[nodiscard]] constexpr bool integer() const noexcept
-		    requires(HasInteger)
+		    requires HasInteger
 		{
 			return kind() == kind_t::integer;
 		}
 
 		[[nodiscard]] constexpr bool uinteger() const noexcept
-		    requires(HasUInteger)
+		    requires HasUInteger
 		{
 			return kind() == kind_t::uinteger;
 		}
@@ -328,7 +328,7 @@ namespace bizwen
 		}
 
 		constexpr explicit operator integer_type() const
-		    requires(HasInteger)
+		    requires HasInteger
 		{
 			if (!integer())
 				throw std::runtime_error("json error: value isn't an integer.");
@@ -337,7 +337,7 @@ namespace bizwen
 		}
 
 		constexpr explicit operator uinteger_type() const
-		    requires(HasUInteger)
+		    requires HasUInteger
 		{
 			if (!uinteger())
 				throw std::runtime_error("json error: value isn't an unsigned integer.");
@@ -362,7 +362,7 @@ namespace bizwen
 		}
 
 		template <typename KeyStrLike>
-		    requires std::convertible_to<KeyStrLike, key_string_type> || std::convertible_to<key_string_type, KeyStrLike>
+		    requires std::convertible_to<KeyStrLike, key_string_type> // wrong, need check transparent comparable
 		constexpr basic_json_slice operator[](KeyStrLike const& k) const
 		{
 			if (!object())
@@ -475,7 +475,7 @@ namespace bizwen
 		}
 
 		template <typename StrLike>
-		    requires std::convertible_to<StrLike, string_type> || std::convertible_to<string_type, StrLike>
+		    requires std::constructible_from<string_type, StrLike>
 		constexpr basic_json_slice& operator=(StrLike const& str)
 		{
 			bool is_string = string();
@@ -513,63 +513,54 @@ namespace bizwen
 			return *this;
 		}
 
-		constexpr basic_json_slice& operator=(bool b)
-		{
-			bool is_boolean = boolean();
-			bool is_empty = empty();
-
-			if (!is_boolean || !is_empty)
-				throw std::runtime_error("json error: current value is not empty or not null.");
-
-			if (is_empty)
-				(*json_).kind(b ? kind_t::true_value : kind_t::false_value);
-
-			return *this;
-		}
-
-		template <std::floating_point T>
+		template <typename T>
+		    requires std::is_arithmetic_v<T>
 		constexpr basic_json_slice& operator=(T n)
 		{
-			bool is_number = number() || uinteger() || integer();
-			bool is_empty = empty();
+			if constexpr (std::same_as<T, bool>)
+			{
+				bool is_boolean = boolean();
+				bool is_empty = empty();
 
-			if (!is_number || !is_empty)
-				throw std::runtime_error("json error: current value is not empty or not null.");
+				if (!is_boolean || !is_empty)
+					throw std::runtime_error("json error: current value is not empty or not bool.");
 
-			(*json_).stor().num_ = n;
-			(*json_).kind(kind_t::number);
+				if (is_empty)
+					(*json_).kind(n ? kind_t::true_value : kind_t::false_value);
+			}
+			else if constexpr (HasInteger && std::signed_integral<T>)
+			{
+				bool is_number = number() || uinteger() || integer();
+				bool is_empty = empty();
 
-			return *this;
-		}
+				if (!is_number || !is_empty)
+					throw std::runtime_error("json error: current value is not empty or not a number.");
 
-		template <std::signed_integral T>
-		    requires HasInteger
-		constexpr basic_json_slice& operator=(T i)
-		{
-			bool is_number = number() || uinteger() || integer();
-			bool is_empty = empty();
+				(*json_).stor().int_ = n;
+				(*json_).kind(kind_t::integer);
+			}
+			else if constexpr (HasUInteger && std::unsigned_integral<T>)
+			{
+				bool is_number = number() || uinteger() || integer();
+				bool is_empty = empty();
 
-			if (!is_number || !is_empty)
-				throw std::runtime_error("json error: current value is not empty or not null.");
+				if (!is_number || !is_empty)
+					throw std::runtime_error("json error: current value is not empty or not a number.");
 
-			(*json_).stor().int_ = i;
-			(*json_).kind(kind_t::integer);
+				(*json_).stor().uint_ = n;
+				(*json_).kind(kind_t::uinteger);
+			}
+			else // fallback
+			{
+				bool is_number = number() || uinteger() || integer();
+				bool is_empty = empty();
 
-			return *this;
-		}
+				if (!is_number || !is_empty)
+					throw std::runtime_error("json error: current value is not empty or not a number.");
 
-		template <std::unsigned_integral T>
-		    requires HasUInteger
-		constexpr basic_json_slice& operator=(T i)
-		{
-			bool is_number = number() || uinteger() || integer();
-			bool is_empty = empty();
-
-			if (!is_number || !is_empty)
-				throw std::runtime_error("json error: current value is not empty or not null.");
-
-			(*json_).stor().uint_ = i;
-			(*json_).kind(kind_t::uinteger);
+				(*json_).stor().num_ = n;
+				(*json_).kind(kind_t::number);
+			}
 
 			return *this;
 		}
@@ -695,13 +686,13 @@ namespace bizwen
 		}
 
 		[[nodiscard]] constexpr bool integer() const noexcept
-		    requires(HasInteger)
+		    requires HasInteger
 		{
 			return kind() == kind_t::integer;
 		}
 
 		[[nodiscard]] constexpr bool uinteger() const noexcept
-		    requires(HasUInteger)
+		    requires HasUInteger
 		{
 			return kind() == kind_t::uinteger;
 		}
@@ -799,7 +790,7 @@ namespace bizwen
 		}
 
 		constexpr explicit operator integer_type() const
-		    requires(HasInteger)
+		    requires HasInteger
 		{
 			if (!integer())
 				throw std::runtime_error("json error: value isn't an integer.");
@@ -808,7 +799,7 @@ namespace bizwen
 		}
 
 		constexpr explicit operator uinteger_type() const
-		    requires(HasUInteger)
+		    requires HasUInteger
 		{
 			if (!uinteger())
 				throw std::runtime_error("json error: value isn't an unsigned integer.");
@@ -833,7 +824,7 @@ namespace bizwen
 		}
 
 		template <typename KeyStrLike>
-		    requires std::convertible_to<KeyStrLike, key_string_type> || std::convertible_to<key_string_type, KeyStrLike>
+		    requires std::convertible_to<KeyStrLike, key_string_type> // wrong, need check transparent comparable
 		constexpr basic_const_json_slice operator[](KeyStrLike const& k) const
 		{
 			if (!object())
@@ -1190,32 +1181,29 @@ namespace bizwen
 
 		constexpr basic_json(decltype(nullptr)) noexcept = delete; // prevent implicit construct string
 
-		constexpr basic_json(bool v) noexcept
+		template <typename T>
+		    requires std::is_arithmetic_v<T>
+		constexpr basic_json(T n) noexcept
 		{
-			v ? kind(kind_t::true_value) : kind(kind_t::false_value);
-		}
-
-		template <std::floating_point T>
-		constexpr basic_json(T v) noexcept
-		{
-			stor().num_ = v;
-			kind(kind_t::number);
-		}
-
-		template <std::signed_integral T>
-		    requires HasInteger
-		constexpr basic_json(T v) noexcept
-		{
-			stor().int_ = v;
-			kind(kind_t::integer);
-		}
-
-		template <std::unsigned_integral T>
-		    requires  HasUInteger
-		constexpr basic_json(T v) noexcept
-		{
-			stor().uint_ = v;
-			kind(kind_t::uinteger);
+			if constexpr (std::same_as<T, bool>)
+			{
+				kind(n ? kind_t::true_value : kind_t::false_value);
+			}
+			else if constexpr (HasInteger && std::signed_integral<T>)
+			{
+				stor().int_ = n;
+				kind(kind_t::integer);
+			}
+			else if constexpr (HasUInteger && std::unsigned_integral<T>)
+			{
+				stor().uint_ = n;
+				kind(kind_t::uinteger);
+			}
+			else // fallback
+			{
+				stor().num_ = n;
+				kind(kind_t::number);
+			}
 		}
 
 		constexpr explicit basic_json(string_type v)
@@ -1251,7 +1239,7 @@ namespace bizwen
 		}
 
 		template <typename StrLike>
-		    requires std::convertible_to<StrLike, string_type> || std::convertible_to<string_type, StrLike>
+		    requires std::constructible_from<string_type, StrLike>
 		constexpr basic_json(StrLike const& str)
 		{
 			alloc_guard_<string_type> guard(*this);
@@ -1412,7 +1400,7 @@ namespace bizwen
 
 		template <typename... StrLike>
 		static constexpr basic_json array(StrLike&&... args)
-		    requires(std::convertible_to<StrLike, string_type> && ...) && (std::convertible_to<string_type, StrLike> && ...)
+		    requires(std::constructible_from<string_type, StrLike> && ...)
 		{
 			array_type arr;
 			arr.reserve(sizeof...(StrLike));
