@@ -13,7 +13,7 @@ Markup Shorthands: biblio yes
 ED: https://github.com/YexuanXiao/basic_json/blob/master/proposal.bs
 </pre>
 
-Motivation
+Motivation {#motivation}
 ==========
 
 JSON is a widely used data-interchange format, but C++ does not have a built-in support for it. There are many third-party libraries that provide JSON support for C++, but they have some drawbacks, such as:
@@ -29,8 +29,7 @@ Therefore, this proposal aims to provide a minimal JSON support library for C++,
 - It has a simple and consistent interface, which follows the existing C++ standard library conventions and styles, and can be easily learned and used by C++ programmers.
 - It has a sufficient level of features, performance, and compatibility, which can cover most common use cases of JSON data, and can work with any conforming C++ compiler and platform.
 
-Proposal
-========
+## Proposal {#proposal}
 
 I propose to add a json header file and five classes (templates): nulljson_t, basic_json_node, basic_json, basic_const_json_slice, basic_json_slice.
 
@@ -59,29 +58,39 @@ template <typename Node, typename String,
 class basic_json_slice;
 ```
 
-Design
-======
+## Design {#design}
 
-Since JSON has a self-referential structure ([[RFC8259]]), type erasure techniques must be used, so basic_json_node is designed.
+Since JSON has a self-referential structure ([[RFC8259]]), type erasure techniques must be used.
 
+<img src="https://www.json.org/img/object.png width="100%">
 <img src="https://www.json.org/img/value.png" width="100%">
 
-nulljson_t is a type similar to nullopt_t, used to indicate that the value of JSON is null.
+### nulljson/nulljson_t
 
-basic_json_node is a substitute for basic_json, providing storage space for basic_json in any situation where circular dependencies may occur.
+nulljson is a type similar to nullopt, used to indicate that the value of JSON is null.
 
-basica_json can be implemented as storing a basic_json_node as a non-static data member, and does not have any other non-static data members, which makes basic_json and basic_json_node have the same size.
+nulljson_t is the type of nulljson, it is a trivial type and can be default constructed.
+
+### basic_json_node
 
 basic_json_node has five template parameters, Boolean, Number, Integer, UInteger, Allocator, users can use these template parameters to customize their preferred types and allocators.
 
 For example, some users may prefer to use fixed-length integer types, some users may prefer to use integer types provided by C++ keywords, and the same for floating-point types.
 
+basic_json_node usually holds an allocator, an enum that indicates the kind, and a union that stores boolean, number (floating point), integer, unsigned integer, string, array(vector), object(map).
+
+basic_json_node is a substitute for basic_json, providing storage space for basic_json in any situation where circular dependencies may occur.
+
+basic_json_node is conceptually similar to void*, it does not always own memory, but can transfer memory through it.
+
+### basic_json
+
+basica_json can be implemented as storing a basic_json_node as a non-static data member, and does not have any other non-static data members, which makes basic_json and basic_json_node have the same size.
+
 The reason why the allocator is a template parameter of basic_json_node rather than basic_json is that basic_json must have the same size as basic_json_node, so char is usually used to instantiate the allocator (void type can be used after LWG issue [[3917]] is resolved),
 and then rebind is used to allocate storage. Once a specialization of basic_json_node is available, basic_json can be instantiated.basic_json has six template parameters: Node, String, Array, Map, HasInteger, HasUInteger.
 
 Node must be a specialization of basic_json_node, and since basic_json_node provides type aliases to obtain the template arguments, basic_json can extract these type aliases, rewrite the specialization of basic_json_node, and compare it with Node to ensure this.
-
-basic_json_node usually holds an allocator, an enum that indicates the kind, and a union that stores boolean, number (floating point), integer, unsigned integer, string, array(vector), object(map).
 
 For arithmetic and boolean types, they are directly stored in the union, and since map and array store basic_json_node, pointers are needed to break the circular dependency,
 and since the two types are not determined when instantiating basic_json_node, they are actually void*. Conceptually, basic_json is a hybrid of container adapters and containers.
@@ -90,7 +99,7 @@ Although string type does not have circular dependency problem, void* is also us
 
 <img src="https://raw.githubusercontent.com/YexuanXiao/basic_json/master/figure.png" width="100%">
 
-Therefore, the Allocator template parameter of basic_json_node is not used directly, but is rebound to the allocators of string, array, and object. basic_json_node is conceptually similar to void*, it does not hold memory, but can transfer memory through it.
+Therefore, the Allocator template parameter of basic_json_node is not used directly, but is rebound to the allocators of string, array, and object.
 
 The triviality of basic_json_node depends on Allocator, if Allocator is trivial, then basic_json arrays will get faster copy speed.
 
@@ -102,11 +111,15 @@ The most special point of my proposal is to expose basic_json_node, which allows
 if a basic_json object that stores an array or object type is needed, then users can construct array and object themselves, such as `std::vector<basic_json_node<>> a` and `std::map<std::string, basic_json_node> m`, then construct basic_json objects through the constructors of boolean or arithmetic types,
 and then insert them into the container, finally, move a or m to the constructor of basic_json, and get a basic_json object that represents an array or map.
 
+### basic_json_slice/basic_const_json_slice
+
 json_slice and const_json_slice are similar to iterator and const_iterator, const_json_slice is constructed from basic_json const& and holds a pointer to basic_json. All non-static functions of const_json_slice are const, and return a value or a reference to a const object.
 
 json_slice has all the member functions that const_json_slice has, and can be converted to const_json_slice. In addition, json_slice also has modifiers (overload of assignment operators), which can modify the value without changing the type of the value stored by json.
 
 json_slice is trivially copyable, so copying a json_slice has low overhead. Any operation on json_slice does not produce a copy of the basic_json object, and for subscript operations, json_slice always returns a new json_slice.
+
+### Summary
 
 This design makes the basic_json template independent of the specific vector type, map type, string type, and if the user likes, he can use std::map, std::flat_map, std::unordered_map,
 and the string type as the Key of the Object and the string type as the Value can be different, which makes KeyString can be implemented with a dictionary that records all possible values. This design does not care whether the string type has char_traits and allocator,
@@ -114,8 +127,7 @@ and in extreme cases, this design allows both strings to be std::string_view, su
 
 This makes it possible to not copy any strings (but still need to use dynamic memory to store maps and arrays).
 
-Implementation experience
-======
+## Implementation experience {#experience}
 
 I have provided a simple implementation on [Github](https://github.com/YexuanXiao/basic_json/blob/master/basic_json.hpp), the source code of the document is available in the same repository.
 
@@ -123,8 +135,112 @@ I have not implemented any allocator-related functions, because I do not have mu
 
 The design is feasible and stable, but I need some feedback to appropriately increase the usability of the library.
 
-Appendix
-======
+## Use cases {#usecases}
+
+```cpp
+#include "basic_json.hpp"
+#include <string_view>
+int main()
+{
+	/*
+	    Note: This code is for demonstration purposes only and can only be compiled, not run.
+	*/
+	// json
+	using json = bizwen::basic_json<>;
+	using namespace std::literals;
+	json j01{};
+	json j02{ j01 };
+	// j j03{nullptr};  deleted
+	json j04{ 1. };
+	json j05{ true };
+	json j06{ 1.f };
+	json j07{ 1u };
+	json j08{ 1l };
+	json j09{ 1ll };
+	json j10{ 1ull };
+	json j11{ "aaa" };
+	auto str = "bbb";
+	json j12{ str, str + 3 };
+	json j13{ str, 3 };
+	json j14{ str };
+	json j15{ "bbb"sv };
+	// since initializer_list returns a reference to a const object, this method is inefficient
+	// json j16{ json::array_type{ json{0}, json{1} } };
+	// json j17{ json::object_type{ { "key0"s, json{ 0 } }, { "key1"s, json{ 1 } } } };
+	json j16{ json::array(0, 1) };
+	json j17{ json::object(json::map_node_type{ "key0"s, json{ 0 } }, json::map_node_type{ "key1"s, json{ 1 } }) };
+	json j18{ bizwen::basic_json_node<>{} };
+	swap(j17, j18); // adl hidden friend
+	j17.swap(j18);
+	j17 = j18;
+	std::swap(j17, j18);
+	json::node_type n{ std::move(j18) };
+
+	// const_slice
+	using const_slice = bizwen::const_json_slice;
+	const_slice c1;
+	c1.empty();
+	c1.array();
+	c1.string();
+	c1.null();
+	c1.boolean();
+	c1.number();
+	c1.object();
+	c1.array();
+	c1.object();
+	c1.integer();
+	c1.uinteger();
+	c1["key"];
+	c1["key"s];
+	// requires transparent comparable
+	// c1["key"sv];
+	c1[1];
+	const_slice c2{ j17 };
+	c2.swap(c1);
+	std::swap(c1, c2);
+	const_slice c3{ std::move(j17) };
+	const_slice c4 = c3;
+	const_slice c5 = std::move(c4);
+	c4 = c5;
+	c5 = std::move(c4);
+	bool b{ c5 };
+	bizwen::nulljson_t nj{ c5 };
+	json::string_type const& s{ c5 };
+	json::array_type const& a{ c5 };
+	for (auto const& i : a)
+	{
+		const_slice item{ i };
+	}
+	json::object_type const& o{ c5 };
+	for (auto const& [k, v] : o)
+	{
+		const_slice item{ v };
+	}
+	long long ll{ c5 };
+	unsigned long long ull{ c5 };
+
+	// slice
+	using slice = bizwen::json_slice;
+	slice s1{};
+	slice s2{ j17 };
+	const_slice c6 = s2;
+	std::string str1;
+	s2 = str1;
+	s2 = std::string{};
+	s2 = "aaa";
+	s2 = std::string_view{};
+	s2 = bizwen::nulljson;
+	s2 = true;
+	s2 = 1.;
+	s2 = 1;
+	s2 = 1u;
+	s2 = 1ll;
+	s2 = 1ull;
+	s2 = n;
+}
+```
+
+## Appendix {#appendix}
 
 ```cpp
 struct nulljson_t
@@ -158,16 +274,28 @@ template <typename Node = basic_json_node<>, typename String = std::string,
 class basic_json
 {
 public:
+	static inline constexpr bool has_integer = HasInteger;
+	static inline constexpr bool has_uinteger = HasUInteger;
+
 	using node_type = Node;
-	using object_type = Map;
+	using object_type = Object;
 	using value_type = Node;
 	using array_type = Array;
 	using string_type = String;
+
 	using slice_type = /* ... */;
 	using const_slice_type = /* ... */;
 
-	static inline constexpr bool has_integer = HasInteger;
-	static inline constexpr bool has_uinteger = HasUInteger;
+	using number_type = node_type::number_type;
+	using boolean_type = node_type::boolean_type;
+	using integer_type = node_type::integer_type;
+	using uinteger_type = node_type::uinteger_type;
+
+	using char_type = string_type::value_type;
+	using map_node_type = object_type::value_type;
+	using allocator_type = node_type::allocator_type;
+	using key_string_type = object_type::key_type;
+	using key_char_type = key_string_type::value_type;
 
 	constexpr void swap(basic_json& rhs) noexcept;
 	friend constexpr void swap(basic_json& lhs, basic_json& rhs) noexcept;
@@ -211,16 +339,29 @@ template <typename Node = basic_json_node<>, typename String = std::string,
 class basic_json_slice
 {
 public:
-	using node_type = Node;
-	using value_type = Node;
-	using object_type = Map;
-	using array_type = Array;
-	using string_type = String;
-	using slice_type = /* ... */;
-	using const_slice_type = /* ... */;
-
 	static inline constexpr bool has_integer = HasInteger;
 	static inline constexpr bool has_uinteger = HasUInteger;
+
+	using node_type = Node;
+	using object_type = Object;
+	using value_type = Node;
+	using array_type = Array;
+	using string_type = String;
+
+	using slice_type = /* ... */;
+	using const_slice_type = /* ... */;
+	using json_type = /* ... */;
+	
+	using number_type = node_type::number_type;
+	using boolean_type = node_type::boolean_type;
+	using integer_type = node_type::integer_type;
+	using uinteger_type = node_type::uinteger_type;
+
+	using char_type = string_type::value_type;
+	using map_node_type = object_type::value_type;
+	using allocator_type = node_type::allocator_type;
+	using key_string_type = object_type::key_type;
+	using key_char_type = key_string_type::value_type;
 
 	[[nodiscard]] constexpr bool empty() const noexcept;
 	[[nodiscard]] constexpr bool string() const noexcept;
@@ -287,15 +428,29 @@ template <typename Node = basic_json_node<>, typename String = std::string,
 class basic_const_json_slice
 {
 public:
-	using node_type = Node;
-	using value_type = Node;
-	using object_type = Map;
-	using array_type = Array;
-	using string_type = String;
-	using slice_type = /* ... */;
-
 	static inline constexpr bool has_integer = HasInteger;
 	static inline constexpr bool has_uinteger = HasUInteger;
+
+	using node_type = Node;
+	using object_type = Object;
+	using value_type = Node;
+	using array_type = Array;
+	using string_type = String;
+
+	using slice_type = /* ... */;
+	using const_slice_type = /* ... */;
+	using json_type = /* ... */;
+	
+	using number_type = node_type::number_type;
+	using boolean_type = node_type::boolean_type;
+	using integer_type = node_type::integer_type;
+	using uinteger_type = node_type::uinteger_type;
+
+	using char_type = string_type::value_type;
+	using map_node_type = object_type::value_type;
+	using allocator_type = node_type::allocator_type;
+	using key_string_type = object_type::key_type;
+	using key_char_type = key_string_type::value_type;
 
 	[[nodiscard]] constexpr bool empty() const noexcept;
 	[[nodiscard]] constexpr bool string() const noexcept;

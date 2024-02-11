@@ -67,19 +67,19 @@ namespace bizwen
 
 		template <typename Node, typename String,
 		    typename Array,
-		    typename Map,
+		    typename Object,
 		    bool HasInteger, bool HasUInteger>
 		friend class basic_json;
 
 		template <typename Node, typename String,
 		    typename Array,
-		    typename Map,
+		    typename Object,
 		    bool HasInteger, bool HasUInteger>
 		friend class basic_const_json_slice;
 
 		template <typename Node, typename String,
 		    typename Array,
-		    typename Map,
+		    typename Object,
 		    bool HasInteger, bool HasUInteger>
 		friend class basic_json_slice;
 
@@ -119,34 +119,38 @@ namespace bizwen
 
 	template <typename Node, typename String,
 	    typename Array,
-	    typename Map,
+	    typename Object,
 	    bool HasInteger, bool HasUInteger>
 	class basic_json_slice
 	{
-	public:
-		using node_type = Node;
-		using value_type = Node;
-		using object_type = Map;
-		using array_type = Array;
-		using string_type = String;
-
-		// slices need to store HasInteger and HasUInteger for deserializers
 		static inline constexpr bool has_integer = HasInteger;
 		static inline constexpr bool has_uinteger = HasUInteger;
 
+		using node_type = Node;
+		using object_type = Object;
+		using value_type = Node;
+		using array_type = Array;
+		using string_type = String;
+
+		using slice_type = basic_json_slice;
+		using const_json_slice = basic_const_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
 		using json_type = basic_json<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
-		using const_slice_type = basic_const_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
+		
+		using number_type = node_type::number_type;
+		using boolean_type = node_type::boolean_type;
+		using integer_type = node_type::integer_type;
+		using uinteger_type = node_type::uinteger_type;
+
+		using char_type = string_type::value_type;
+		using map_node_type = object_type::value_type;
+		using allocator_type = node_type::allocator_type;
+		using key_string_type = object_type::key_type;
+		using key_char_type = key_string_type::value_type;
 
 	private:
-		using kind_t = json_type::kind_t;
-		using number_t = node_type::number_type;
-		using boolean_t = node_type::boolean_type;
-		using integer_t = node_type::integer_type;
-		using uinteger_t = node_type::uinteger_type;
-		using char_t = string_type::value_type;
-		using key_string_t = object_type::key_type;
-		using key_char_t = key_string_t::value_type;
-		using stor_t = json_type::stor_t;
+		using traits_t = std::allocator_traits<allocator_type>;
+		using kind_t = node_type::kind_t;
+		using stor_t = node_type::stor_t;
 
 		friend class basic_json<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
 		friend class basic_const_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
@@ -269,7 +273,7 @@ namespace bizwen
 
 		constexpr basic_json_slice& operator=(basic_json_slice&& rhs) noexcept = default;
 
-		constexpr explicit operator boolean_t() const
+		constexpr explicit operator boolean_type() const
 		{
 			if (!boolean())
 				throw std::runtime_error("json error: value isn't a boolean.");
@@ -279,7 +283,7 @@ namespace bizwen
 			return k == kind_t::true_value ? 1 : 0;
 		}
 
-		constexpr explicit operator number_t() const
+		constexpr explicit operator number_type() const
 		{
 			auto k = kind();
 			auto s = stor();
@@ -326,7 +330,7 @@ namespace bizwen
 			return *static_cast<object_type*>(json_->stor_.obj_);
 		}
 
-		constexpr explicit operator integer_t() const
+		constexpr explicit operator integer_type() const
 		    requires(HasInteger)
 		{
 			if (!integer())
@@ -335,7 +339,7 @@ namespace bizwen
 			return json_->stor_.int_;
 		}
 
-		constexpr explicit operator uinteger_t() const
+		constexpr explicit operator uinteger_type() const
 		    requires(HasUInteger)
 		{
 			if (!uinteger())
@@ -344,7 +348,7 @@ namespace bizwen
 			return json_->stor_.uint_;
 		}
 
-		constexpr basic_json_slice operator[](key_string_t const& k) const
+		constexpr basic_json_slice operator[](key_string_type const& k) const
 		{
 			if (!object())
 				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
@@ -361,7 +365,7 @@ namespace bizwen
 		}
 
 		template <typename KeyStrLike>
-		    requires std::convertible_to<KeyStrLike, key_string_t> || std::convertible_to<key_string_t, KeyStrLike>
+		    requires std::convertible_to<KeyStrLike, key_string_type> || std::convertible_to<key_string_type, KeyStrLike>
 		constexpr basic_json_slice operator[](KeyStrLike const& k) const
 		{
 			if (!object())
@@ -378,7 +382,7 @@ namespace bizwen
 			return v;
 		}
 
-		constexpr basic_json_slice operator[](key_char_t* k) const
+		constexpr basic_json_slice operator[](key_char_type* k) const
 		{
 			if (!object())
 				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
@@ -450,7 +454,7 @@ namespace bizwen
 			return *this;
 		}
 
-		constexpr basic_json_slice& operator=(char_t* str)
+		constexpr basic_json_slice& operator=(char_type* str)
 		{
 			bool is_string = string();
 			bool is_empty = empty();
@@ -526,8 +530,8 @@ namespace bizwen
 			return *this;
 		}
 
-		constexpr basic_json_slice& operator=(boolean_t b)
-		    requires(!std::same_as<boolean_t, bool>)
+		constexpr basic_json_slice& operator=(boolean_type b)
+		    requires(!std::same_as<boolean_type, bool>)
 		{
 			return *this = b;
 		}
@@ -548,7 +552,7 @@ namespace bizwen
 		}
 
 		template <std::signed_integral T>
-		    requires(sizeof(T) > sizeof(boolean_t)) && HasInteger
+		    requires(sizeof(T) > sizeof(boolean_type)) && HasInteger
 		constexpr basic_json_slice& operator=(T i)
 		{
 			bool is_number = number() || uinteger() || integer();
@@ -564,7 +568,7 @@ namespace bizwen
 		}
 
 		template <std::unsigned_integral T>
-		    requires(sizeof(T) > sizeof(boolean_t)) && HasUInteger
+		    requires(sizeof(T) > sizeof(boolean_type)) && HasUInteger
 		constexpr basic_json_slice& operator=(T i)
 		{
 			bool is_number = number() || uinteger() || integer();
@@ -596,33 +600,39 @@ namespace bizwen
 
 	template <typename Node, typename String,
 	    typename Array,
-	    typename Map,
+	    typename Object,
 	    bool HasInteger, bool HasUInteger>
 	class basic_const_json_slice
 	{
 	public:
-		using node_type = Node;
-		using value_type = Node;
-		using object_type = Map;
-		using array_type = Array;
-		using string_type = String;
-
 		static inline constexpr bool has_integer = HasInteger;
 		static inline constexpr bool has_uinteger = HasUInteger;
 
+		using node_type = Node;
+		using object_type = Object;
+		using value_type = Node;
+		using array_type = Array;
+		using string_type = String;
+
+		using slice_type = basic_json_slice<node_type, string_type, array_type, object_type, HasInteger, HasUInteger>;
+		using const_slice_type = basic_const_json_slice;
 		using json_type = basic_json<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
-		using slice_type = basic_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
+		
+		using number_type = node_type::number_type;
+		using boolean_type = node_type::boolean_type;
+		using integer_type = node_type::integer_type;
+		using uinteger_type = node_type::uinteger_type;
+
+		using char_type = string_type::value_type;
+		using map_node_type = object_type::value_type;
+		using allocator_type = node_type::allocator_type;
+		using key_string_type = object_type::key_type;
+		using key_char_type = key_string_type::value_type;
 
 	private:
-		using kind_t = json_type::kind_t;
-		using number_t = node_type::number_type;
-		using boolean_t = node_type::boolean_type;
-		using integer_t = node_type::integer_type;
-		using uinteger_t = node_type::uinteger_type;
-		using char_t = string_type::value_type;
-		using key_string_t = object_type::key_type;
-		using key_char_t = key_string_t::value_type;
-		using stor_t = json_type::stor_t;
+		using traits_t = std::allocator_traits<allocator_type>;
+		using kind_t = node_type::kind_t;
+		using stor_t = node_type::stor_t;
 
 		friend class basic_json<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
 		friend class basic_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
@@ -741,7 +751,7 @@ namespace bizwen
 
 		constexpr basic_const_json_slice& operator=(basic_const_json_slice&& rhs) noexcept = default;
 
-		constexpr explicit operator boolean_t() const
+		constexpr explicit operator boolean_type() const
 		{
 			if (!boolean())
 				throw std::runtime_error("json error: value not a boolean.");
@@ -751,7 +761,7 @@ namespace bizwen
 			return k == kind_t::true_value ? 1 : 0;
 		}
 
-		constexpr explicit operator number_t() const
+		constexpr explicit operator number_type() const
 		{
 			auto k = kind();
 			auto s = stor();
@@ -798,7 +808,7 @@ namespace bizwen
 			return *static_cast<object_type const*>(stor().obj_);
 		}
 
-		constexpr explicit operator integer_t() const
+		constexpr explicit operator integer_type() const
 		    requires(HasInteger)
 		{
 			if (!integer())
@@ -807,7 +817,7 @@ namespace bizwen
 			return stor().int_;
 		}
 
-		constexpr explicit operator uinteger_t() const
+		constexpr explicit operator uinteger_type() const
 		    requires(HasUInteger)
 		{
 			if (!uinteger())
@@ -816,7 +826,7 @@ namespace bizwen
 			return stor().uint_;
 		}
 
-		constexpr basic_const_json_slice operator[](key_string_t const& k) const
+		constexpr basic_const_json_slice operator[](key_string_type const& k) const
 		{
 			if (!object())
 				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
@@ -833,7 +843,7 @@ namespace bizwen
 		}
 
 		template <typename KeyStrLike>
-		    requires std::convertible_to<KeyStrLike, key_string_t> || std::convertible_to<key_string_t, KeyStrLike>
+		    requires std::convertible_to<KeyStrLike, key_string_type> || std::convertible_to<key_string_type, KeyStrLike>
 		constexpr basic_const_json_slice operator[](KeyStrLike const& k) const
 		{
 			if (!object())
@@ -850,7 +860,7 @@ namespace bizwen
 			return v;
 		}
 
-		constexpr basic_const_json_slice operator[](key_char_t* k) const
+		constexpr basic_const_json_slice operator[](key_char_type* k) const
 		{
 			if (!object())
 				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
@@ -884,54 +894,57 @@ namespace bizwen
 
 	template <typename Node, typename String,
 	    typename Array,
-	    typename Map,
+	    typename Object,
 	    bool HasInteger, bool HasUInteger>
 	class basic_json
 	{
 	public:
+		static inline constexpr bool has_integer = HasInteger;
+		static inline constexpr bool has_uinteger = HasUInteger;
+
 		using node_type = Node;
-		using object_type = Map;
+		using object_type = Object;
 		using value_type = Node;
 		using array_type = Array;
 		using string_type = String;
 
-		static inline constexpr bool has_integer = HasInteger;
-		static inline constexpr bool has_uinteger = HasUInteger;
-
 		using slice_type = basic_json_slice<node_type, string_type, array_type, object_type, HasInteger, HasUInteger>;
 		using const_slice_type = basic_const_json_slice<node_type, string_type, array_type, object_type, HasInteger, HasUInteger>;
 
+		using number_type = node_type::number_type;
+		using boolean_type = node_type::boolean_type;
+		using integer_type = node_type::integer_type;
+		using uinteger_type = node_type::uinteger_type;
+
+		using char_type = string_type::value_type;
+		using map_node_type = object_type::value_type;
+		using allocator_type = node_type::allocator_type;
+		using key_string_type = object_type::key_type;
+		using key_char_type = key_string_type::value_type;
+
 	private:
+		using traits_t = std::allocator_traits<allocator_type>;
 		using kind_t = node_type::kind_t;
-		using number_t = node_type::number_type;
-		using boolean_t = node_type::boolean_type;
-		using integer_t = node_type::integer_type;
-		using uinteger_t = node_type::uinteger_type;
-		using char_t = string_type::value_type;
-		using key_string_t = object_type::key_type;
-		using key_char_t = key_string_t::value_type;
-		using allocator_t = node_type::allocator_type;
-		using traits_t = std::allocator_traits<allocator_t>;
 		using stor_t = node_type::stor_t;
 
 		friend class basic_const_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
 		friend class basic_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
 
-		static_assert(std::integral<char_t>);
-		static_assert(std::integral<boolean_t>);
-		static_assert(std::integral<key_char_t>);
-		static_assert(std::floating_point<number_t>);
-		static_assert(std::signed_integral<integer_t>);
-		static_assert(std::unsigned_integral<uinteger_t>);
-		static_assert(sizeof(boolean_t) < sizeof(integer_t));
-		static_assert(sizeof(integer_t) == sizeof(uinteger_t));
+		static_assert(std::integral<char_type>);
+		static_assert(std::integral<boolean_type>);
+		static_assert(std::integral<key_char_type>);
+		static_assert(std::floating_point<number_type>);
+		static_assert(std::signed_integral<integer_type>);
+		static_assert(std::unsigned_integral<uinteger_type>);
+		static_assert(sizeof(boolean_type) < sizeof(integer_type));
+		static_assert(sizeof(integer_type) == sizeof(uinteger_type));
 		static_assert(std::same_as<node_type, typename array_type::value_type>);
 		static_assert(std::same_as<node_type, typename object_type::mapped_type>);
 		static_assert(std::random_access_iterator<typename array_type::iterator>);
 		static_assert(std::random_access_iterator<typename string_type::iterator>);
 		static_assert(std::bidirectional_iterator<typename object_type::iterator>);
-		static_assert(std::random_access_iterator<typename key_string_t::iterator>);
-		static_assert(std::same_as<basic_json_node<boolean_t, number_t, integer_t, uinteger_t>, node_type>);
+		static_assert(std::random_access_iterator<typename key_string_type::iterator>);
+		static_assert(std::same_as<basic_json_node<boolean_type, number_type, integer_type, uinteger_type>, node_type>);
 
 		node_type node_;
 
@@ -1190,13 +1203,13 @@ namespace bizwen
 
 		constexpr basic_json(decltype(nullptr)) noexcept = delete; // prevent implicit construct string
 
-		constexpr basic_json(boolean_t v) noexcept
+		constexpr basic_json(boolean_type v) noexcept
 		{
 			v ? kind(kind_t::true_value) : kind(kind_t::false_value);
 		}
 
 		constexpr basic_json(bool v) noexcept
-		    requires(!std::same_as<bool, boolean_t>)
+		    requires(!std::same_as<bool, boolean_type>)
 		{
 			v ? kind(kind_t::true_value) : kind(kind_t::false_value);
 		}
@@ -1209,7 +1222,7 @@ namespace bizwen
 		}
 
 		template <std::signed_integral T>
-		    requires(sizeof(T) > sizeof(boolean_t)) && HasInteger
+		    requires(sizeof(T) > sizeof(boolean_type)) && HasInteger
 		constexpr basic_json(T v) noexcept
 		{
 			stor().int_ = v;
@@ -1217,7 +1230,7 @@ namespace bizwen
 		}
 
 		template <std::unsigned_integral T>
-		    requires(sizeof(T) > sizeof(boolean_t)) && HasUInteger
+		    requires(sizeof(T) > sizeof(boolean_type)) && HasUInteger
 		constexpr basic_json(T v) noexcept
 		{
 			stor().uint_ = v;
@@ -1232,7 +1245,7 @@ namespace bizwen
 			kind(kind_t::string);
 		}
 
-		constexpr basic_json(char_t const* begin, char_t const* end)
+		constexpr basic_json(char_type const* begin, char_type const* end)
 		{
 			alloc_guard_<string_type> guard(*this);
 			stor().str_ = new (guard.get()) string_type(begin, end);
@@ -1240,7 +1253,7 @@ namespace bizwen
 			kind(kind_t::string);
 		}
 
-		constexpr basic_json(char_t const* str, string_type::size_type count)
+		constexpr basic_json(char_type const* str, string_type::size_type count)
 		{
 			alloc_guard_<string_type> guard(*this);
 			stor().str_ = new (guard.get()) string_type(str, count);
@@ -1248,7 +1261,7 @@ namespace bizwen
 			kind(kind_t::string);
 		}
 
-		constexpr explicit basic_json(char_t const* str)
+		constexpr explicit basic_json(char_type const* str)
 		{
 			alloc_guard_<string_type> guard(*this);
 			stor().str_ = new (guard.get()) string_type(str);
@@ -1266,7 +1279,7 @@ namespace bizwen
 			kind(kind_t::string);
 		}
 
-		constexpr explicit basic_json(array_type arr)
+		constexpr basic_json(array_type arr)
 		{
 			rollbacker_array_all_ rollbacker(arr);
 			alloc_guard_<array_type> guard(*this);
@@ -1276,7 +1289,7 @@ namespace bizwen
 			kind(kind_t::array);
 		}
 
-		constexpr explicit basic_json(object_type obj)
+		constexpr basic_json(object_type obj)
 		{
 			rollbacker_map_all_ rollbacker(obj);
 			alloc_guard_<object_type> guard(*this);
@@ -1286,7 +1299,7 @@ namespace bizwen
 			kind(kind_t::object);
 		}
 
-		constexpr explicit basic_json(node_type&& n) noexcept
+		constexpr basic_json(node_type&& n) noexcept
 		{
 			kind(kind_t{});
 			stor() = stor_t{};
@@ -1384,6 +1397,68 @@ namespace bizwen
 		constexpr const_slice_type slice() const
 		{
 			return *this;
+		}
+
+		template <std::integral... Args>
+		    requires(sizeof...(Args) > sizeof(boolean_type))
+		static constexpr basic_json array(Args... args)
+		{
+			array_type arr;
+			arr.reserve(sizeof...(Args));
+			(arr.push_back(basic_json(args)), ...);
+
+			return arr;
+		}
+
+		template <std::floating_point... Args>
+		static constexpr basic_json array(Args... args)
+		{
+			array_type arr;
+			arr.reserve(sizeof...(Args));
+			(arr.push_back(basic_json(args)), ...);
+
+			return arr;
+		}
+
+		template <std::same_as<bool>... Args>
+		static constexpr basic_json array(Args... args)
+		{
+			array_type arr;
+			arr.reserve(sizeof...(Args));
+			(arr.push_back(basic_json(args)), ...);
+
+			return arr;
+		}
+
+		template <std::same_as<boolean_type>... Args>
+		static constexpr basic_json array(Args... args)
+		{
+			array_type arr;
+			arr.reserve(sizeof...(Args));
+			(arr.push_back(basic_json(args)), ...);
+
+			return arr;
+		}
+
+		template <typename... StrLike>
+		static constexpr basic_json array(StrLike&&... args)
+		    requires(std::convertible_to<StrLike, string_type> && ...) && (std::convertible_to<string_type, StrLike> && ...)
+		{
+			array_type arr;
+			arr.reserve(sizeof...(StrLike));
+			(arr.push_back(basic_json(std::forward<StrLike>(args))), ...);
+
+			return arr;
+		}
+
+		template <typename... Args>
+		    requires(std::same_as<typename object_type::value_type, std::decay_t<Args>> && ...)
+		static constexpr basic_json object(Args&&... args)
+		{
+			object_type obj;
+			(obj.insert(std::forward<Args>(args)), ...);
+
+			return obj;
 		}
 	};
 
