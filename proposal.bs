@@ -8,7 +8,7 @@ Status: D
 Audience: LEWG
 Group: WG21
 Date: 2024-02-09
-Markup Shorthands: markdown yes
+Markup Shorthands: markdown on
 Markup Shorthands: biblio yes
 ED: https://github.com/YexuanXiao/basic_json/blob/master/proposal.bs
 </pre>
@@ -19,8 +19,7 @@ img {
 }
 </style>
 
-Motivation
-======
+# Motivation
 
 JSON is a widely used data-interchange format, but C++ does not have a built-in support for it. There are many third-party libraries that provide JSON support for C++, but they have some drawbacks, such as:
 
@@ -35,8 +34,7 @@ Therefore, this proposal aims to provide a minimal JSON support library for C++,
 - It has a simple and consistent interface, which follows the existing C++ standard library conventions and styles, and can be easily learned and used by C++ programmers.
 - It has a sufficient level of features, performance, and compatibility, which can cover most common use cases of JSON data, and can work with any conforming C++ compiler and platform.
 
-Proposal
-======
+# Proposal
 
 I propose to add a json header file and five classes (templates): nulljson_t, basic_json_node, basic_json, basic_const_json_slice, basic_json_slice.
 
@@ -65,21 +63,20 @@ template <typename Node, typename String,
 class basic_json_slice;
 ```
 
-Design
-======
+# Design
 
 Since JSON has a self-referential structure ([[RFC8259]]), type erasure techniques must be used.
 
-<img src="https://www.json.org/img/object.png>
+<img src="https://www.json.org/img/object.png">
 <img src="https://www.json.org/img/value.png">
 
-### nulljson/nulljson_t
+## nulljson/nulljson_t
 
 nulljson is a type similar to nullopt, used to indicate that the value of JSON is null.
 
 nulljson_t is the type of nulljson, it is a trivial type and can be default constructed.
 
-### basic_json_node
+## basic_json_node
 
 basic_json_node has four template parameters, Number, Integer, UInteger, Allocator, users can use these template parameters to customize their preferred types and allocators.
 
@@ -91,7 +88,7 @@ basic_json_node is a substitute for basic_json, providing storage space for basi
 
 basic_json_node is conceptually similar to void*, it does not always own memory, but can transfer memory through it.
 
-### basic_json
+## basic_json
 
 basica_json can be implemented as storing a basic_json_node as a non-static data member, and does not have any other non-static data members, which makes basic_json and basic_json_node have the same size.
 
@@ -119,7 +116,7 @@ The most special point of my proposal is to expose basic_json_node, which allows
 if a basic_json object that stores an array or object type is needed, then users can construct array and object themselves, such as `std::vector<basic_json_node<>> a` and `std::map<std::string, basic_json_node> m`, then construct basic_json objects through the constructors of boolean or arithmetic types,
 and then insert them into the container, finally, move a or m to the constructor of basic_json, and get a basic_json object that represents an array or map.
 
-### basic_json_slice/basic_const_json_slice
+## basic_json_slice/basic_const_json_slice
 
 json_slice and const_json_slice are similar to iterator and const_iterator, const_json_slice is constructed from basic_json const& and holds a pointer to basic_json. All non-static functions of const_json_slice are const, and return a value or a reference to a const object.
 
@@ -127,7 +124,7 @@ json_slice has all the member functions that const_json_slice has, and can be co
 
 json_slice is trivially copyable, so copying a json_slice has low overhead. Any operation on json_slice does not produce a copy of the basic_json object, and for subscript operations, json_slice always returns a new json_slice.
 
-### Summary
+## Summary
 
 This design makes the basic_json template independent of the specific vector type, map type, string type, and if the user likes, he can use std::map, std::flat_map, std::unordered_map,
 and the string type as the Key of the Object and the string type as the Value can be different, which makes KeyString can be implemented with a dictionary that records all possible values. This design does not care whether the string type has char_traits and allocator,
@@ -135,8 +132,7 @@ and in extreme cases, this design allows both strings to be std::string_view, su
 
 This makes it possible to not copy any strings (but still need to use dynamic memory to store maps and arrays).
 
-Implementation experience
-======
+# Implementation experience
 
 I have provided a simple implementation on [Github](https://github.com/YexuanXiao/basic_json/blob/master/basic_json.hpp), the source code of the document is available in the same repository.
 
@@ -144,8 +140,7 @@ I have not implemented any allocator-related functions, because I do not have mu
 
 The design is feasible and stable, but I need some feedback to appropriately increase the usability of the library.
 
-Use cases
-======
+# Use cases
 
 ```cpp
 #include "basic_json.hpp"
@@ -250,8 +245,7 @@ int main()
 }
 ```
 
-Appendix
-======
+# Appendix
 
 ```cpp
 struct nulljson_t
@@ -489,8 +483,7 @@ public:
 }
 ```
 
-Acknowledgements
-======
+# Acknowledgements
 
 Thanks to F.v.S for the information about the polymorphic allocator, and the suggestions for nulljson_t and constructor.
 
