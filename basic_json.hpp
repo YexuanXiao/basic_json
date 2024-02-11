@@ -21,7 +21,7 @@ namespace bizwen
 	inline constexpr nulljson_t nulljson{};
 
 	template <typename Number = double,
-	    typename Integer = long long, typename UInteger = unsigned long long, typename Allocator = std::allocator<void>>
+	    typename Integer = long long, typename UInteger = unsigned long long, typename Allocator = std::allocator<char>>
 	class basic_json_node;
 
 	template <typename Node = basic_json_node<>, typename String = std::string,
@@ -44,9 +44,7 @@ namespace bizwen
 
 	// https://cplusplus.github.io/LWG/issue3917
 	// since the types of string, array and map are unknown at this point,
-	// memory allocation can only be done by instantiating void.
-	// This requires allocator<void>, allocator<string>, allocator<map>, and allocator<array>
-	// satisfy DefaultConstructable and TrivialCopyable.
+	// memory allocation can only be done by instantiating char.
 	template <typename Number,
 	    typename Integer, typename UInteger, typename Allocator>
 	class basic_json_node: protected Allocator
@@ -1303,22 +1301,44 @@ namespace bizwen
 				break;
 			}
 			case kind_t::array: {
-				auto const& rarr = *static_cast<array_type const*>(rs.arr_);
-				alloc_guard_<array_type> guard(*this);
-				auto lptr = new (guard.get()) array_type(rarr);
-				array_type& larr{ *lptr };
-				auto sentry = larr.begin();
-				rollbacker_array_part_ rollbacker(sentry, larr);
-
-				auto first = rarr.begin();
-				auto last = rarr.end();
-				for (; first != last; ++sentry, ++first)
+				if constexpr (std::is_trivially_copyable_v<allocator_type>)
 				{
-					reinterpret_cast<basic_json&>(*sentry).clone(reinterpret_cast<basic_json const&>(*first));
-				}
+					auto const& rarr = *static_cast<array_type const*>(rs.arr_);
+					alloc_guard_<array_type> guard(*this);
+					auto lptr = new (guard.get()) array_type(rarr);
+					array_type& larr{ *lptr };
+					auto sentry = larr.begin();
+					rollbacker_array_part_ rollbacker(sentry, larr);
 
-				guard.release();
-				s.arr_ = lptr;
+					auto first = rarr.begin();
+					auto last = rarr.end();
+					for (; first != last; ++sentry, ++first)
+					{
+						reinterpret_cast<basic_json&>(*sentry).clone(reinterpret_cast<basic_json const&>(*first));
+					}
+
+					guard.release();
+					s.arr_ = lptr;
+				}
+				else
+				{
+					auto const& rarr = *static_cast<array_type const*>(rs.arr_);
+					alloc_guard_<array_type> guard(*this);
+					auto lptr = new (guard.get()) array_type();
+					array_type& larr{ *lptr };
+					larr.reserve(rarr.size());
+					rollbacker_array_all_ rollbacker(larr);
+
+					auto first = rarr.begin();
+					auto last = rarr.end();
+					for (; first != last; ++first)
+					{
+						larr.push_back(basic_json{reinterpret_cast<basic_json const&>(*first)});
+					}
+
+					guard.release();
+					s.arr_ = lptr;
+				}
 				break;
 			}
 			case kind_t::object: {
