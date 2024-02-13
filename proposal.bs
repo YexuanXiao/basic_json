@@ -153,14 +153,14 @@ The design is feasible and stable, but I need some feedback to appropriately inc
 int main()
 {
 	/*
-	    Note: This code is for demonstration purposes only and can only be compiled, not run.
+	    Note: This code is for demonstration purposes only and can be compiled only, not be run.
 	*/
 	// json
 	using json = bizwen::json;
 	using namespace std::literals;
 	json j01{};
 	json j02{ j01 };
-	// j j03{nullptr};  deleted
+	// j j03{ nullptr };  deleted
 	json j04{ 1. };
 	json j05{ true };
 	json j06{ 1.f };
@@ -247,6 +247,7 @@ int main()
 	s2 = 1ll;
 	s2 = 1ull;
 	s2 = n;
+	s2["key"] = 1;
 }
 ```
 
@@ -323,6 +324,7 @@ public:
 	constexpr explicit basic_json(char_t const* str);
 	template <typename StrLike>
 		requires std::constructible_from<string_type, StrLike>
+		&& (std::is_convertible_v<StrLike const&, char_type const*> == false)
 	constexpr basic_json(StrLike const& str);
 	constexpr explicit basic_json(array_type arr);
 	constexpr explicit basic_json(object_type obj);
@@ -401,17 +403,19 @@ public:
 		requires HasInteger;
 	constexpr explicit operator uinteger_t() const
 		requires HasUInteger;
-	constexpr basic_json_slice operator[](key_string_t const& k) const;
+	constexpr basic_json_slice operator[](key_string_t const& k);
 	template <typename KeyStrLike>
-		requires transparent_comparable<KeyStrLike, key_string_t>;
-	constexpr basic_json_slice operator[](KeyStrLike const& k) const;
-	constexpr basic_json_slice operator[](key_char_t* k) const;
-	constexpr basic_json_slice operator[](array_type::size_type pos) const;
+		requires transparent_comparable<KeyStrLike, key_string_t>
+		&& (std::is_convertible_v<KeyStrLike const&, key_char_type const*> == false)
+	constexpr basic_json_slice operator[](KeyStrLike const& k);
+	constexpr basic_json_slice operator[](key_char_t* k);
+	constexpr basic_json_slice operator[](array_type::size_type pos);
 	constexpr basic_json_slice& operator=(string_type const& str);
 	constexpr basic_json_slice& operator=(string_type&& str);
 	constexpr basic_json_slice& operator=(char_t* str);
 	template <typename StrLike>
 		requires std::constructible_from<string_type, StrLike>
+		&& (std::is_convertible_v<KeyStrLike const&, key_char_type const*> == false)
 	constexpr basic_json_slice& operator=(StrLike const& str);
 	constexpr basic_json_slice& operator=(nulljson_t n);
 	template <typename T>
@@ -483,7 +487,8 @@ public:
 		requires HasUInteger;
 	constexpr basic_const_json_slice operator[](key_string_t const& k) const;
 	template <typename KeyStrLike>
-		requires transparent_comparable<KeyStrLike, key_string_t>;
+		requires transparent_comparable<KeyStrLike, key_string_t>
+		&& (std::is_convertible_v<KeyStrLike const&, key_char_type const*> == false)
 	constexpr basic_const_json_slice operator[](KeyStrLike const& k) const;
 	constexpr basic_const_json_slice operator[](key_char_t* k) const;
 	constexpr basic_const_json_slice operator[](array_type::size_type pos) const;

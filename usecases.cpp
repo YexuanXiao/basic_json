@@ -3,7 +3,7 @@
 int main()
 {
 	/*
-	    Note: This code is for demonstration purposes only and can only be compiled, not run.
+	    Note: This code is for demonstration purposes only and can be compiled only, not be run.
 	*/
 	// json
 	using json = bizwen::json;
@@ -97,4 +97,5 @@ int main()
 	s2 = 1ll;
 	s2 = 1ull;
 	s2 = n;
+	s2["key"] = 1;
 }

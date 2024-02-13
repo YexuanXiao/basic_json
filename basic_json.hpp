@@ -103,8 +103,8 @@ namespace bizwen
 			uinteger_type uint_;
 		};
 
-		stor_t stor_;
-		kind_t kind_;
+		stor_t stor_{};
+		kind_t kind_{};
 
 	public:
 		constexpr basic_json_node() noexcept = default;
@@ -343,52 +343,41 @@ namespace bizwen
 			return json_->stor_.uint_;
 		}
 
-		constexpr basic_json_slice operator[](key_string_type const& k) const
+		constexpr basic_json_slice operator[](key_string_type const& k)
 		{
-			if (!object())
+			if (!object() || !empty())
 				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
 
-			auto const& o = *static_cast<object_type const*>(stor().obj_);
-			auto i = o.find(k);
-
-			if (i == o.end())
-				throw std::runtime_error("key does not exist.");
-
-			auto const& [key, v] = *i;
+			auto& o = *static_cast<object_type*>(stor().obj_);
+			auto [i, _] = o.emplace(k, node_type{});
+			auto& [_, v] = *i;
 
 			return v;
 		}
 
 		template <typename KeyStrLike>
 		    requires std::convertible_to<KeyStrLike, key_string_type> // wrong, need check transparent comparable
-		constexpr basic_json_slice operator[](KeyStrLike const& k) const
+		    && (std::is_convertible_v<KeyStrLike const&, key_char_type const*> == false)
+		constexpr basic_json_slice operator[](KeyStrLike const& k)
 		{
 			if (!object())
 				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
 
-			auto const& o = *static_cast<object_type const*>(stor().obj_);
-			auto i = o.find(k);
-
-			if (i == o.end())
-				throw std::runtime_error("key does not exist.");
-
-			auto const& [_, v] = *i;
+			auto& o = *static_cast<object_type*>(stor().obj_);
+			auto [i, _] = o.emplace(k, node_type{});
+			auto& [_, v] = *i;
 
 			return v;
 		}
 
-		constexpr basic_json_slice operator[](key_char_type* k) const
+		constexpr basic_json_slice operator[](key_char_type const* k)
 		{
 			if (!object())
 				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
 
-			auto const& o = *static_cast<object_type const*>(stor().obj_);
-			auto i = o.find(k);
-
-			if (i == o.end())
-				throw std::runtime_error("key does not exist.");
-
-			auto const& [_, v] = *i;
+			auto& o = *static_cast<object_type*>(stor().obj_);
+			auto [i, _] = o.emplace(k, node_type{});
+			auto& [_, v] = *i;
 
 			return v;
 		}
@@ -449,7 +438,7 @@ namespace bizwen
 			return *this;
 		}
 
-		constexpr basic_json_slice& operator=(char_type* str)
+		constexpr basic_json_slice& operator=(char_type const* str)
 		{
 			bool is_string = string();
 			bool is_empty = empty();
@@ -474,6 +463,7 @@ namespace bizwen
 
 		template <typename StrLike>
 		    requires std::constructible_from<string_type, StrLike>
+		    && (std::is_convertible_v<StrLike const&, char_type const*> == false)
 		constexpr basic_json_slice& operator=(StrLike const& str)
 		{
 			bool is_string = string();
@@ -482,16 +472,16 @@ namespace bizwen
 			if (!is_string || !is_empty)
 				throw std::runtime_error("json error: current value is not empty or not a string.");
 
-			if (is_empty)
+			if (is_string)
+			{
+				*static_cast<string_type*>(stor().str_) = str;
+			}
+			else
 			{
 				typename json_type::template alloc_guard_<string_type> guard(*json_);
 				stor().str_ = new (guard.get()) string_type(str);
 				guard.release();
 				(*json_).kind(kind_t::string);
-			}
-			else
-			{
-				*static_cast<string_type*>(stor().str_) = str;
 			}
 
 			return *this;
@@ -822,6 +812,7 @@ namespace bizwen
 
 		template <typename KeyStrLike>
 		    requires std::convertible_to<KeyStrLike, key_string_type> // wrong, need check transparent comparable
+		    && (std::is_convertible_v<KeyStrLike const&, key_char_type const*> == false)
 		constexpr basic_const_json_slice operator[](KeyStrLike const& k) const
 		{
 			if (!object())
@@ -838,7 +829,7 @@ namespace bizwen
 			return v;
 		}
 
-		constexpr basic_const_json_slice operator[](key_char_type* k) const
+		constexpr basic_const_json_slice operator[](key_char_type const* k) const
 		{
 			if (!object())
 				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
@@ -1237,6 +1228,7 @@ namespace bizwen
 
 		template <typename StrLike>
 		    requires std::constructible_from<string_type, StrLike>
+		    && (std::is_convertible_v<StrLike const&, char_type const*> == false)
 		constexpr basic_json(StrLike const& str)
 		{
 			alloc_guard_<string_type> guard(*this);
@@ -1410,7 +1402,7 @@ namespace bizwen
 		struct type_list
 		{
 		};
-		
+
 		template <typename T1, typename T2, typename... Ts>
 		static consteval std::size_t get_pair_num_pair(type_list<T1, T2, Ts...>) noexcept
 		{
