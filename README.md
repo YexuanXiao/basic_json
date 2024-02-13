@@ -2,6 +2,8 @@
 
 This is a modern C++ library for working with JSON data. It aims to provide full support for the JSON standard, as well as allowing users to customize and extend the library according to their needs. The library offers a user-friendly and C++-idiomatic API, without compromising on performance.
 
+To simplify complexity, this implementation relies entirely on C++17’s constexpr if, and also uses C++20’s concepts. Although there are no plans at the moment, I think it can be ported to C++17.
+
 ## Goals
 
 - Supports JSON Pointer, JSON Patch

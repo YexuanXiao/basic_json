@@ -26,19 +26,19 @@ namespace bizwen
 
 	template <typename Node = basic_json_node<>, typename String = std::string,
 	    typename Array = std::vector<Node>,
-	    typename Map = std::map<String, Node>,
+	    typename Object = std::map<String, Node>,
 	    bool HasInteger = true, bool HasUInteger = true>
 	class basic_json;
 
 	template <typename Node = basic_json_node<>, typename String = std::string,
 	    typename Array = std::vector<Node>,
-	    typename Map = std::map<String, Node>,
+	    typename Object = std::map<String, Node>,
 	    bool HasInteger = true, bool HasUInteger = true>
 	class basic_const_json_slice;
 
 	template <typename Node = basic_json_node<>, typename String = std::string,
 	    typename Array = std::vector<Node>,
-	    typename Map = std::map<String, Node>,
+	    typename Object = std::map<String, Node>,
 	    bool HasInteger = true, bool HasUInteger = true>
 	class basic_json_slice;
 
@@ -1275,7 +1275,7 @@ namespace bizwen
 		{
 			auto node = reinterpret_cast<node_type&>(*this);
 			kind(kind_t{});
-			stor() = std::remove_reference_t<decltype(stor())>{};
+			stor() = {};
 
 			return node;
 		}
@@ -1331,7 +1331,7 @@ namespace bizwen
 					auto last = rarr.end();
 					for (; first != last; ++first)
 					{
-						larr.push_back(basic_json{reinterpret_cast<basic_json const&>(*first)});
+						larr.push_back(basic_json{ reinterpret_cast<basic_json const&>(*first) });
 					}
 
 					guard.release();
@@ -1406,6 +1406,67 @@ namespace bizwen
 
 			return obj;
 		}
+	};
+
+	enum class json_config : unsigned int
+	{
+		// for deserializer
+		allow_null = 0x0,
+		allow_comment = 0x1,
+		allow_overflow_number = 0x2,
+		allow_underflow_number = 0x4,
+		allow_overflow_integer = 0x8,
+		allow_underflow_integer = 0x10,
+		allow_overflow_uinteger = 0x20,
+		treat_overflow_integer_as_number = 0x40,
+		// for reflector
+		treat_null_as_defaulted = 0x80,
+		treat_undefined_as_defaulted = 0x100,
+		// for serializer
+		treat_empty_as_null = 0x200,
+		treat_empty_as_undefined = 0x400,
+		treat_empty_as_literal = 0x800, // debug only
+	};
+
+	enum class json_error
+	{
+		// for accessor
+		is_empty = 1,
+		not_null,
+		not_boolean,
+		not_number,
+		not_integer,
+		not_uinteger,
+		not_array,
+		not_object,
+		// for modifier
+		not_empty_or_null,
+		not_empty_or_boolean,
+		not_empty_or_number,
+		not_empty_or_integer,
+		not_empty_or_uinteger,
+		not_empty_or_array,
+		not_empty_or_object,
+		// for deserializer
+		unexpect_token,
+		unexpect_comment,
+		unexpect_undefined,
+		missing_square_bracket,
+		missing_brace,
+		missing_double_quote,
+		number_overflow,
+		number_underflow,
+		integer_overflow,
+		integer_underflow,
+		uinteger_overflow,
+		illegal_character,
+		// for serializer
+		unexpect_empty,
+		number_nan,
+		number_inf,
+		// for reflector
+		unexpect_null,
+		unexpect_type,
 	};
 
 	using json = basic_json<>;

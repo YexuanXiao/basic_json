@@ -6,7 +6,7 @@ int main()
 	    Note: This code is for demonstration purposes only and can only be compiled, not run.
 	*/
 	// json
-	using json = bizwen::basic_json<>;
+	using json = bizwen::json;
 	using namespace std::literals;
 	json j01{};
 	json j02{ j01 };
