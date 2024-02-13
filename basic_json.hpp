@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 #include <concepts>
+#include <array>
 
 // https://www.rfc-editor.org/rfc/rfc8259
 
@@ -1386,26 +1387,91 @@ namespace bizwen
 			return *this;
 		}
 
+		/* to maintain consistency with object, this implementation is not used
 		template <typename... Args>
 		    requires(std::constructible_from<basic_json, Args> && ...)
 		static constexpr basic_json array(Args&&... args)
 		{
-			array_type arr;
-			arr.reserve(sizeof...(Args));
-			(arr.push_back(basic_json(std::forward<Args>(args))), ...);
+		    array_type arr;
+		    arr.reserve(sizeof...(Args));
+		    (arr.push_back(basic_json(std::forward<Args>(args))), ...);
 
-			return arr;
+		    return arr;
 		}
-
-		template <typename... Args>
-		    requires(std::same_as<std::decay_t<Args>, typename object_type::value_type> && ...)
-		static constexpr basic_json object(Args&&... args)
+		*/
+	private:
+		struct pair
 		{
-			object_type obj;
-			(obj.insert(std::forward<Args>(args)), ...);
+			string_type key;
+			basic_json value;
+		};
 
-			return obj;
+		template <typename... Ts>
+		struct type_list
+		{
+		};
+		
+		template <typename T1, typename T2, typename... Ts>
+		static consteval std::size_t get_pair_num_pair(type_list<T1, T2, Ts...>) noexcept
+		{
+			return 2 + get_pair_num(type_list<Ts...>{});
 		}
+
+		template <typename T1, typename... Ts>
+		static consteval std::size_t get_pair_num(type_list<T1, Ts...>) noexcept
+		{
+			static_assert(sizeof...(Ts) > 0, "there should be a json value after string in json object");
+			return get_pair_num_pair(type_list<T1, Ts...>{});
+		}
+
+		static consteval std::size_t get_pair_num(type_list<>) noexcept
+		{
+			return 0;
+		}
+
+	public:
+		template <std::size_t N>
+		struct object
+		{
+			std::array<pair, N> arr;
+
+			constexpr operator basic_json() &&
+			{
+				object_type obj;
+				for (auto& pair : arr)
+				{
+					obj.emplace(std::move(pair.key), std::move(pair.value));
+				}
+
+				return obj;
+			}
+		};
+
+		// deduction guide for object{...}
+		template <typename... Ts>
+		object(Ts&&...) -> object<get_pair_num(type_list<Ts...>{})>;
+
+		template <typename... Ts>
+		struct array
+		{
+		private:
+			basic_json json;
+
+		public:
+			array(Ts... ts)
+			    requires(std::constructible_from<basic_json, Ts> && ...)
+			{
+				array_type arr;
+				arr.reserve(sizeof...(Ts));
+				(arr.push_back(basic_json(std::forward<Ts>(ts))), ...);
+				json = std::move(arr);
+			}
+
+			constexpr operator basic_json() &&
+			{
+				return std::move(json);
+			}
+		};
 	};
 
 	enum class json_config : unsigned int

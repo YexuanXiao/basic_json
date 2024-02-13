@@ -10,7 +10,7 @@ int main()
 	using namespace std::literals;
 	json j01{};
 	json j02{ j01 };
-	// j j03{nullptr};  deleted
+	// j j03{ nullptr };  deleted
 	json j04{ 1. };
 	json j05{ true };
 	json j06{ 1.f };
@@ -27,8 +27,8 @@ int main()
 	// since initializer_list returns a reference to a const object, this method is inefficient
 	// json j16{ json::array_type{ json{0}, json{1} } };
 	// json j17{ json::object_type{ { "key0"s, json{ 0 } }, { "key1"s, json{ 1 } } } };
-	json j16{ json::array(0, 1) };
-	json j17{ json::object(json::map_node_type{ "key0"s, json{ 0 } }, json::map_node_type{ "key1"s, json{ 1 } }) };
+	json j16{ json::array{ 0, 1 } };
+	json j17{ json::object{"key0"s, 0, "key1"s, 1} };
 	json j18{ bizwen::basic_json_node<>{} };
 	swap(j17, j18); // adl hidden friend
 	j17.swap(j18);

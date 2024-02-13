@@ -21,8 +21,11 @@ img {
 
 # Motivation
 
-JSON is a widely used data-interchange format, but C++ does not have a built-in support for it. There are many third-party libraries that provide JSON support for C++, but they have some drawbacks, such as:
+JSON is an internet standard, widely used for data transmission and storage, but the C++ standard library lacks support for JSON, which forces C++ users to choose among third-party libraries.
 
+As the C++ standard evolves, C++ becomes more and more suitable for network programming, and C++'s high performance makes C++ equally suitable for processing large amounts of data stored by JSON, so adding JSON to the standard library is beneficial and harmless to C++.
+
+There are many third-party libraries that provide JSON support for C++, but they have some drawbacks, such as:
 - They may have external dependencies, which can increase the complexity and size of the project, and introduce potential errors and incompatibilities.
 - They may have different interfaces, conventions, and styles, which can reduce the readability and consistency of the code, and increase the learning curve for new users.
 - They may have different levels of features, performance, and compatibility, which can make it hard to choose the best one for a specific use case, and may require switching between different libraries for different scenarios.
@@ -33,6 +36,7 @@ Therefore, this proposal aims to provide a minimal JSON support library for C++,
 - It does not have any external dependencies, and can be easily integrated into any C++ project, without affecting the existing code or environment.
 - It has a simple and consistent interface, which follows the existing C++ standard library conventions and styles, and can be easily learned and used by C++ programmers.
 - It has a sufficient level of features, performance, and compatibility, which can cover most common use cases of JSON data, and can work with any conforming C++ compiler and platform.
+- It is easy to implement, with only about 1500 lines of code, which avoids too much implementation details and problems.
 
 # Proposal
 
@@ -65,7 +69,7 @@ class basic_json_slice;
 
 # Design
 
-Since JSON has a self-referential structure ([[RFC8259]]), type erasure techniques must be used.
+Since JSON has a self-referential structure ([[RFC8259]]), type erasure must be used.
 
 <img src="https://www.json.org/img/object.png">
 <img src="https://www.json.org/img/value.png">
@@ -112,7 +116,7 @@ Most of the member functions of basic_json are constructors, which make C++ valu
 
 In addition, basic_json also json has a right-value-qualified to node_type conversion function, which can transfer memory from basic_json to basic_json_node, just like a pointer.
 
-The most special point of my proposal is to expose basic_json_node, which allows users to implement their own serialization and deserialization functions in a non-intrusive way: if a basic_json object that stores a boolean or arithmetic type value is needed, then construct it directly through the constructor,
+The most special point of my proposal is to expose basic_json_node, which allows users to implement their own serializer and deserializer in a non-intrusive way: if a basic_json object that stores a boolean or arithmetic type value is needed, then construct it directly through the constructor,
 if a basic_json object that stores an array or object type is needed, then users can construct array and object themselves, such as `std::vector<basic_json_node<>> a` and `std::map<std::string, basic_json_node> m`, then construct basic_json objects through the constructors of boolean or arithmetic types,
 and then insert them into the container, finally, move a or m to the constructor of basic_json, and get a basic_json object that represents an array or map.
 
@@ -127,9 +131,10 @@ json_slice is trivially copyable, so copying a json_slice has low overhead. Any 
 ## Summary
 
 This design makes the basic_json template independent of the specific vector type, map type, string type, and if the user likes, he can use std::map, std::flat_map, std::unordered_map,
-and the string type as the Key of the Object and the string type as the Value can be different, which makes KeyString can be implemented with a dictionary that records all possible values. This design does not care whether the string type has char_traits and allocator,
-and in extreme cases, this design allows both strings to be std::string_view, such as mapping the json byte stream to memory, each std::string_view references a part of the memory.
+and the string type as the Key of the Object and the String type as the Value can be different, which makes KeyString can be implemented with a dictionary that records all possible values.
 
+This design does not care whether the string type has char_traits and allocator,
+and in extreme cases, this design allows both strings to be std::string_view, such as mapping the json byte stream to memory, each std::string_view references a part of the memory.
 This makes it possible to not copy any strings (but still need to use dynamic memory to store maps and arrays).
 
 # Implementation experience
@@ -151,7 +156,7 @@ int main()
 	    Note: This code is for demonstration purposes only and can only be compiled, not run.
 	*/
 	// json
-	using json = bizwen::basic_json<>;
+	using json = bizwen::json;
 	using namespace std::literals;
 	json j01{};
 	json j02{ j01 };
@@ -172,8 +177,8 @@ int main()
 	// since initializer_list returns a reference to a const object, this method is inefficient
 	// json j16{ json::array_type{ json{0}, json{1} } };
 	// json j17{ json::object_type{ { "key0"s, json{ 0 } }, { "key1"s, json{ 1 } } } };
-	json j16{ json::array(0, 1) };
-	json j17{ json::object(json::map_node_type{ "key0"s, json{ 0 } }, json::map_node_type{ "key1"s, json{ 1 } }) };
+	json j16{ json::array{ 0, 1 } };
+	json j17{ json::object{"key0"s, 0, "key1"s, 1} };
 	json j18{ bizwen::basic_json_node<>{} };
 	swap(j17, j18); // adl hidden friend
 	j17.swap(j18);
@@ -265,6 +270,7 @@ public:
 	using integer_type = Integer;
 	using uinteger_type = UInteger;
 	using allocator_type = Allocator;
+
 	constexpr basic_json_node() noexcept = default;
 	constexpr basic_json_node(basic_json_node const&) = default;
 	constexpr basic_json_node(basic_json_node&& rhs) noexcept = default;
@@ -325,12 +331,14 @@ public:
 	constexpr ~basic_json() noexcept;
 	constexpr slice_type slice();
 	constexpr const_slice_type slice() const;
-	template <typename... Args>
-	    requires(std::constructible_from<basic_json, Args> && ...)
-	static constexpr basic_json array(Args&&... args);
-	template <typename... Args>
-	    requires(std::same_as<typename object_type::value_type, std::decay_t<Args>> && ...)
-	static constexpr basic_json object(Args&&... args);
+
+	// Helper Classes
+	template<typename... Ts>
+	struct array{ /*implement defined */ };
+	template <std::size_t N>
+	struct object{ /*implement defined */ };
+	template <typename... Ts>
+	object(Ts&&...) -> object</* implement defined */>;
 }
 
 template <typename Node = basic_json_node<>, typename String = std::string,
@@ -487,7 +495,9 @@ public:
 
 Thanks to F.v.S for the information about the polymorphic allocator, and the suggestions for nulljson_t and constructor.
 
-Thanks to ykiko for simplify code using fold expressions.
+Thanks to ykiko for simplifying code using fold expressions.
+
+Thanks to zwuis for finding the incorrect use of the noexcept specifier and providing a graceful implementation of constructing objects.
 
 <pre class=biblio>
 {
