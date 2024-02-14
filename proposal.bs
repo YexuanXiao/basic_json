@@ -17,6 +17,11 @@ ED: https://github.com/YexuanXiao/basic_json/blob/master/proposal.bs
 img {
 	width: 100%
 }
+@media (prefers-color-scheme: dark) {
+img {
+	filter: invert(1) !important;
+}
+}
 </style>
 
 # Motivation
@@ -71,8 +76,8 @@ class basic_json_slice;
 
 Since JSON has a self-referential structure ([[RFC8259]]), type erasure must be used.
 
-<img src="https://www.json.org/img/object.png">
-<img src="https://www.json.org/img/value.png">
+<img src="https://www.json.org/img/object.png" alt="json.org’s JSON structure diagram: object">
+<img src="https://www.json.org/img/value.png" alt="json.org’s JSON structure diagram: value">
 
 ## nulljson/nulljson_t
 
@@ -106,7 +111,7 @@ and since the two types are not determined when instantiating basic_json_node, t
 
 Although string type does not have circular dependency problem, void* is also used to save the space. The relationship between basic_json and basic_json_node is shown in the following figure:
 
-<img src="https://raw.githubusercontent.com/YexuanXiao/basic_json/master/figure.png">
+<img src="https://raw.githubusercontent.com/YexuanXiao/basic_json/master/figure.png" alt="relationship diagram between node, json and slice">
 
 Therefore, the Allocator template parameter of basic_json_node is not used directly, but is rebound to the allocators of string, array, and object.
 
@@ -153,7 +158,7 @@ The design is feasible and stable, but I need some feedback to appropriately inc
 int main()
 {
 	/*
-	    Note: This code is for demonstration purposes only and can be compiled only, not be run.
+		Note: This code is for demonstration purposes only and can be compiled only, not be run.
 	*/
 	// json
 	using json = bizwen::json;
@@ -316,7 +321,7 @@ public:
 	constexpr basic_json& operator=(basic_json const& rhs);
 	constexpr basic_json(decltype(nullptr)) noexcept = delete;
 	template <typename T>
-	    requires std::is_arithmetic_v<T>
+		requires std::is_arithmetic_v<T>
 	constexpr basic_json(T n) noexcept
 	constexpr explicit basic_json(string_type v);
 	constexpr basic_json(char_t const* begin, char_t const* end);
@@ -419,7 +424,7 @@ public:
 	constexpr basic_json_slice& operator=(StrLike const& str);
 	constexpr basic_json_slice& operator=(nulljson_t n);
 	template <typename T>
-	    requires std::is_arithmetic_v<T>
+		requires std::is_arithmetic_v<T>
 	constexpr basic_json_slice& operator=(T n)
 	constexpr basic_json_slice& operator=(json_t& j);
 	constexpr basic_json_slice& operator=(node_type& n);
@@ -502,7 +507,7 @@ Thanks to F.v.S for the information about the polymorphic allocator, and the sug
 
 Thanks to ykiko for simplifying code using fold expressions.
 
-Thanks to zwuis for finding the incorrect use of the noexcept specifier and providing a graceful implementation of constructing objects.
+Thanks to zwuis for patiently reviewing the code and providing a graceful implementation of constructing objects.
 
 <pre class=biblio>
 {

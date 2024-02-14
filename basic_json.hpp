@@ -343,10 +343,25 @@ namespace bizwen
 			return json_->stor_.uint_;
 		}
 
+	private:
+		constexpr void allocate_object()
+		{
+			typename json_type::template alloc_guard_<object_type> guard(*json_);
+			stor().obj_ = new (guard.get()) object_type();
+			guard.release();
+			(*json_).kind(kind_t::object);
+		}
+
+	public:
 		constexpr basic_json_slice operator[](key_string_type const& k)
 		{
-			if (!object() || !empty())
+			auto e = empty();
+
+			if (!object() && !e)
 				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
+
+			if (e)
+				allocate_object();
 
 			auto& o = *static_cast<object_type*>(stor().obj_);
 			auto [i, _] = o.emplace(k, node_type{});
@@ -360,8 +375,13 @@ namespace bizwen
 		    && (std::is_convertible_v<KeyStrLike const&, key_char_type const*> == false)
 		constexpr basic_json_slice operator[](KeyStrLike const& k)
 		{
-			if (!object())
+			auto e = empty();
+
+			if (!object() && !e)
 				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
+
+			if (e)
+				allocate_object();
 
 			auto& o = *static_cast<object_type*>(stor().obj_);
 			auto [i, _] = o.emplace(k, node_type{});
@@ -372,8 +392,13 @@ namespace bizwen
 
 		constexpr basic_json_slice operator[](key_char_type const* k)
 		{
-			if (!object())
+			auto e = empty();
+
+			if (!object() && !e)
 				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
+
+			if (e)
+				allocate_object();
 
 			auto& o = *static_cast<object_type*>(stor().obj_);
 			auto [i, _] = o.emplace(k, node_type{});
@@ -510,7 +535,7 @@ namespace bizwen
 				bool is_boolean = boolean();
 				bool is_empty = empty();
 
-				if (!is_boolean || !is_empty)
+				if (!is_boolean && !is_empty)
 					throw std::runtime_error("json error: current value is not empty or not bool.");
 
 				if (is_empty)
@@ -521,7 +546,7 @@ namespace bizwen
 				bool is_number = number() || uinteger() || integer();
 				bool is_empty = empty();
 
-				if (!is_number || !is_empty)
+				if (!is_number && !is_empty)
 					throw std::runtime_error("json error: current value is not empty or not a number.");
 
 				(*json_).stor().int_ = n;
@@ -532,7 +557,7 @@ namespace bizwen
 				bool is_number = number() || uinteger() || integer();
 				bool is_empty = empty();
 
-				if (!is_number || !is_empty)
+				if (!is_number && !is_empty)
 					throw std::runtime_error("json error: current value is not empty or not a number.");
 
 				(*json_).stor().uint_ = n;
@@ -543,7 +568,7 @@ namespace bizwen
 				bool is_number = number() || uinteger() || integer();
 				bool is_empty = empty();
 
-				if (!is_number || !is_empty)
+				if (!is_number && !is_empty)
 					throw std::runtime_error("json error: current value is not empty or not a number.");
 
 				(*json_).stor().num_ = n;
@@ -1466,7 +1491,7 @@ namespace bizwen
 		};
 	};
 
-	enum class json_config : unsigned int
+	enum class json_option : unsigned int
 	{
 		// for deserializer
 		allow_null = 0x0,
@@ -1506,6 +1531,7 @@ namespace bizwen
 		not_empty_or_array,
 		not_empty_or_object,
 		// for deserializer
+		unsupported_option,
 		unexpect_token,
 		unexpect_comment,
 		unexpect_undefined,
