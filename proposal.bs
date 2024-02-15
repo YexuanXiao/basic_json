@@ -507,7 +507,7 @@ Thanks to F.v.S for the information about the polymorphic allocator, and the sug
 
 Thanks to ykiko for simplifying code using fold expressions.
 
-Thanks to zwuis for patiently reviewing the code and providing a graceful implementation of constructing objects.
+Thanks to YanzuoLiu for patiently reviewing the code and providing a graceful implementation of constructing objects.
 
 <pre class=biblio>
 {

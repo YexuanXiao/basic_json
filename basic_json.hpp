@@ -9,6 +9,7 @@
 #include <vector>
 #include <concepts>
 #include <array>
+#include <ranges>
 
 // https://www.rfc-editor.org/rfc/rfc8259
 
@@ -306,7 +307,7 @@ namespace bizwen
 			if (!string())
 				throw std::runtime_error("json error: value isn't a string.");
 
-			return *static_cast<string_type*>(json_->stor_.str_);
+			return *static_cast<string_type*>(json_->stor().str_);
 		}
 
 		constexpr explicit operator array_type&() const&
@@ -314,7 +315,7 @@ namespace bizwen
 			if (!array())
 				throw std::runtime_error("json error: value isn't an array.");
 
-			return *static_cast<array_type*>(json_->stor_.arr_);
+			return *static_cast<array_type*>(json_->stor().arr_);
 		}
 
 		constexpr explicit operator object_type&() const&
@@ -322,7 +323,7 @@ namespace bizwen
 			if (!object())
 				throw std::runtime_error("json error: value isn't an object.");
 
-			return *static_cast<object_type*>(json_->stor_.obj_);
+			return *static_cast<object_type*>(json_->stor().obj_);
 		}
 
 		constexpr explicit operator integer_type() const
@@ -331,7 +332,7 @@ namespace bizwen
 			if (!integer())
 				throw std::runtime_error("json error: value isn't an integer.");
 
-			return json_->stor_.int_;
+			return json_->stor().int_;
 		}
 
 		constexpr explicit operator uinteger_type() const
@@ -340,7 +341,7 @@ namespace bizwen
 			if (!uinteger())
 				throw std::runtime_error("json error: value isn't an unsigned integer.");
 
-			return json_->stor_.uint_;
+			return json_->stor().uint_;
 		}
 
 	private:
@@ -590,6 +591,29 @@ namespace bizwen
 			json_ = reinterpret_cast<json_type*>(&n);
 
 			return *this;
+		}
+
+	private:
+		static constexpr basic_json_slice node_to_slice(node_type & node) noexcept
+		{
+			return node;
+		}
+
+		static constexpr std::pair<string_type const&, basic_json_slice> pair_node_to_slice(map_node_type & pair) noexcept
+		{
+			auto& [key, value]{ pair };
+			return { key, value };
+		}
+
+	public:
+		constexpr auto as_array() const
+		{
+			return static_cast<array_type&>(*this) | std::views::transform(node_to_slice);
+		}
+
+		constexpr auto as_object() const
+		{
+			return static_cast<object_type&>(*this) | std::views::transform(pair_node_to_slice);
 		}
 	};
 
@@ -883,6 +907,29 @@ namespace bizwen
 		constexpr basic_const_json_slice(slice_type const& s)
 		{
 			json_ = s.json_;
+		}
+
+	private:
+		static constexpr basic_const_json_slice node_to_slice(node_type & node) noexcept
+		{
+			return node;
+		}
+
+		static constexpr std::pair<string_type const&, basic_const_json_slice> pair_node_to_slice(map_node_type & pair) noexcept
+		{
+			auto& [key, value]{ pair };
+			return { key, value };
+		}
+
+	public:
+		constexpr auto as_array() const
+		{
+			return static_cast<array_type&>(*this) | std::views::transform(node_to_slice);
+		}
+
+		constexpr auto as_object() const
+		{
+			return static_cast<object_type&>(*this) | std::views::transform(pair_node_to_slice);
 		}
 	};
 
@@ -1431,14 +1478,21 @@ namespace bizwen
 		template <typename T1, typename T2, typename... Ts>
 		static consteval std::size_t get_pair_num_pair(type_list<T1, T2, Ts...>) noexcept
 		{
-			return 2 + get_pair_num(type_list<Ts...>{});
+			return 1 + get_pair_num(type_list<Ts...>{});
 		}
 
 		template <typename T1, typename... Ts>
 		static consteval std::size_t get_pair_num(type_list<T1, Ts...>) noexcept
 		{
-			static_assert(sizeof...(Ts) > 0, "there should be a json value after string in json object");
-			return get_pair_num_pair(type_list<T1, Ts...>{});
+			if constexpr (std::same_as<map_node_type, std::remove_cvref_t<T1>>)
+			{
+				return 1 + get_pair_num(type_list<Ts...>{});
+			}
+			else
+			{
+				static_assert(sizeof...(Ts) > 0, "there should be a json value after string in json object");
+				return get_pair_num_pair(type_list<T1, Ts...>{});
+			}
 		}
 
 		static consteval std::size_t get_pair_num(type_list<>) noexcept
