@@ -1397,14 +1397,14 @@ namespace bizwen
 		template <std::size_t N>
 		struct object
 		{
-			std::array<pair, N> arr;
+			pair arr[N];
 
 			constexpr operator basic_json() &&
 			{
 				object_type obj;
-				for (auto& pair : arr)
+				for (auto& i : arr)
 				{
-					obj.emplace(std::move(pair.key), std::move(pair.value));
+					obj.emplace(std::move(i.key), std::move(i.value));
 				}
 
 				return obj;
@@ -1415,27 +1415,28 @@ namespace bizwen
 		template <typename... Ts>
 		object(Ts&&...) -> object<get_pair_num(type_list<Ts...>{})>;
 
+		template <std::size_t N>
 		struct array
 		{
-		private:
-			basic_json json;
-
-		public:
-			template <typename... Ts>
-			array(Ts&&... ts)
-			    requires(std::constructible_from<basic_json, Ts> && ...)
-			{
-				array_type arr;
-				arr.reserve(sizeof...(Ts));
-				(arr.push_back(basic_json(std::forward<Ts>(ts))), ...);
-				json = std::move(arr);
-			}
+			basic_json arr[N];
 
 			constexpr operator basic_json() &&
 			{
-				return std::move(json);
+				array_type arr_;
+				for (auto& value : arr)
+				{
+					arr_.reserve(N);
+					arr.push_back(std::move(value));
+				}
+
+				return arr_;
 			}
 		};
+
+		// deduction guide for array{...}
+		template <typename... Ts>
+		array(Ts&&...) -> array<sizeof...(Ts)>;
+
 	};
 
 	enum class json_option : unsigned int
@@ -1491,6 +1492,8 @@ namespace bizwen
 		integer_underflow,
 		uinteger_overflow,
 		illegal_character,
+		too_deep,
+		too_large,
 		// for serializer
 		unexpect_empty,
 		number_nan,
