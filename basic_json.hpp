@@ -118,52 +118,44 @@ namespace bizwen
 	    typename Array,
 	    typename Object,
 	    bool HasInteger, bool HasUInteger>
-	class basic_json_slice
+	class basic_json_slice: public basic_const_json_slice<Node, String, Array, Object, HasInteger, HasUInteger>
 	{
-		static inline constexpr bool has_integer = HasInteger;
-		static inline constexpr bool has_uinteger = HasUInteger;
+	public:
+		using const_slice_type = basic_const_json_slice<Node, String, Array, Object, HasInteger, HasUInteger>;
 
-		using node_type = Node;
-		using object_type = Object;
-		using value_type = Node;
-		using array_type = Array;
-		using string_type = String;
+		using const_slice_type::has_integer;
+		using const_slice_type::has_uinteger;
 
-		using slice_type = basic_json_slice;
-		using const_json_slice = basic_const_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
-		using json_type = basic_json<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
+		using typename const_slice_type::node_type;
+		using typename const_slice_type::object_type;
+		using typename const_slice_type::value_type;
+		using typename const_slice_type::array_type;
+		using typename const_slice_type::string_type;
 
-		using number_type = node_type::number_type;
-		using integer_type = node_type::integer_type;
-		using uinteger_type = node_type::uinteger_type;
+		using typename const_slice_type::slice_type;
+		// using typename const_slice_type::const_slice_type;
+		using typename const_slice_type::json_type;
 
-		using char_type = string_type::value_type;
-		using map_node_type = object_type::value_type;
-		using allocator_type = node_type::allocator_type;
-		using key_string_type = object_type::key_type;
-		using key_char_type = key_string_type::value_type;
+		using typename const_slice_type::number_type;
+		using typename const_slice_type::integer_type;
+		using typename const_slice_type::uinteger_type;
+
+		using typename const_slice_type::char_type;
+		using typename const_slice_type::map_node_type;
+		using typename const_slice_type::allocator_type;
+		using typename const_slice_type::key_string_type;
+		using typename const_slice_type::key_char_type;
 
 	private:
-		using traits_t = std::allocator_traits<allocator_type>;
-		using kind_t = node_type::kind_t;
-		using stor_t = node_type::stor_t;
+		friend json_type;
+		friend const_slice_type;
 
-		friend class basic_json<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
-		friend class basic_const_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
+		using typename const_slice_type::kind_t;
+		using typename const_slice_type::stor_t;
 
-		json_type* json_{};
+		using const_slice_type::json_;
 
-		constexpr kind_t kind() const noexcept
-		{
-			assert(json_);
-
-			return json_->node_.kind_;
-		}
-
-		constexpr stor_t const& stor() const noexcept
-		{
-			return json_->node_.stor_;
-		}
+		using const_slice_type::stor;
 
 		constexpr stor_t& stor() noexcept
 		{
@@ -171,69 +163,15 @@ namespace bizwen
 		}
 
 	public:
-		[[nodiscard]] constexpr bool empty() const noexcept
-		{
-			return kind() == kind_t::empty;
-		}
-
-		[[nodiscard]] constexpr bool string() const noexcept
-		{
-			return kind() == kind_t::string;
-		}
-
-		[[nodiscard]] constexpr bool null() const noexcept
-		{
-			return kind() == kind_t::null;
-		}
-
-		[[nodiscard]] constexpr bool boolean() const noexcept
-		{
-			auto k = kind();
-
-			return k == kind_t::true_value || k == kind_t::false_value;
-		}
-
-		[[nodiscard]] constexpr bool number() const noexcept
-		{
-			auto k = kind();
-
-			bool is_integer{};
-			bool is_uinteger{};
-
-			if constexpr (HasInteger)
-			{
-				is_integer = k == kind_t::integer;
-			}
-
-			if constexpr (HasUInteger)
-			{
-				is_uinteger = k == kind_t::uinteger;
-			}
-
-			return k == kind_t::number || is_integer || is_uinteger;
-		}
-
-		[[nodiscard]] constexpr bool object() const noexcept
-		{
-			return kind() == kind_t::object;
-		}
-
-		[[nodiscard]] constexpr bool array() const noexcept
-		{
-			return kind() == kind_t::array;
-		}
-
-		[[nodiscard]] constexpr bool integer() const noexcept
-		    requires HasInteger
-		{
-			return kind() == kind_t::integer;
-		}
-
-		[[nodiscard]] constexpr bool uinteger() const noexcept
-		    requires HasUInteger
-		{
-			return kind() == kind_t::uinteger;
-		}
+		using const_slice_type::empty;
+		using const_slice_type::string;
+		using const_slice_type::null;
+		using const_slice_type::boolean;
+		using const_slice_type::number;
+		using const_slice_type::object;
+		using const_slice_type::array;
+		using const_slice_type::integer;
+		using const_slice_type::uinteger;
 
 		constexpr void swap(basic_json_slice& rhs) noexcept
 		{
@@ -256,12 +194,12 @@ namespace bizwen
 		constexpr basic_json_slice(basic_json_slice const& rhs) noexcept = default;
 
 		constexpr basic_json_slice(json_type& j) noexcept
-		    : json_(&j)
+		    : const_slice_type(j)
 		{
 		}
 
 		constexpr basic_json_slice(node_type& n) noexcept
-		    : json_(reinterpret_cast<json_type*>(&n))
+		    : const_slice_type(n)
 		{
 		}
 
@@ -269,79 +207,28 @@ namespace bizwen
 
 		constexpr basic_json_slice& operator=(basic_json_slice&& rhs) noexcept = default;
 
-		constexpr explicit operator bool() const
-		{
-			if (!boolean())
-				throw std::runtime_error("json error: value isn't a boolean.");
-
-			auto k = kind();
-
-			return k == kind_t::true_value ? 1 : 0;
-		}
-
-		constexpr explicit operator number_type() const
-		{
-			auto k = kind();
-			auto s = stor();
-
-			if (k == kind_t::number)
-				return s.num_;
-			else if (k == kind_t::integer)
-				return s.int_;
-			else if (k == kind_t::uinteger)
-				return s.uint_;
-
-			throw std::runtime_error("json error: value isn't a number.");
-		}
-
-		constexpr explicit operator nulljson_t() const
-		{
-			if (!null())
-				throw std::runtime_error("json error: value isn't null.");
-
-			return nulljson;
-		}
-
-		constexpr explicit operator string_type&() const&
+		constexpr explicit operator string_type&() &
 		{
 			if (!string())
 				throw std::runtime_error("json error: value isn't a string.");
 
-			return *static_cast<string_type*>(json_->stor().str_);
+			return *static_cast<string_type*>(stor().str_);
 		}
 
-		constexpr explicit operator array_type&() const&
+		constexpr explicit operator array_type&() &
 		{
 			if (!array())
 				throw std::runtime_error("json error: value isn't an array.");
 
-			return *static_cast<array_type*>(json_->stor().arr_);
+			return *static_cast<array_type*>(stor().arr_);
 		}
 
-		constexpr explicit operator object_type&() const&
+		constexpr explicit operator object_type&() &
 		{
 			if (!object())
 				throw std::runtime_error("json error: value isn't an object.");
 
-			return *static_cast<object_type*>(json_->stor().obj_);
-		}
-
-		constexpr explicit operator integer_type() const
-		    requires HasInteger
-		{
-			if (!integer())
-				throw std::runtime_error("json error: value isn't an integer.");
-
-			return json_->stor().int_;
-		}
-
-		constexpr explicit operator uinteger_type() const
-		    requires HasUInteger
-		{
-			if (!uinteger())
-				throw std::runtime_error("json error: value isn't an unsigned integer.");
-
-			return json_->stor().uint_;
+			return *static_cast<object_type*>(stor().obj_);
 		}
 
 	private:
@@ -354,6 +241,8 @@ namespace bizwen
 		}
 
 	public:
+		using const_slice_type::operator[];
+
 		constexpr basic_json_slice operator[](key_string_type const& k)
 		{
 			auto e = empty();
@@ -408,7 +297,7 @@ namespace bizwen
 			return v;
 		}
 
-		constexpr basic_json_slice operator[](array_type::size_type pos) const
+		constexpr basic_json_slice operator[](array_type::size_type pos)
 		{
 			if (!array())
 				throw std::runtime_error("json error: value isn't an array but is accessed using operator[].");
@@ -599,19 +488,23 @@ namespace bizwen
 			return node;
 		}
 
-		static constexpr std::pair<string_type const&, basic_json_slice> pair_node_to_slice(map_node_type & pair) noexcept
+		static constexpr std::pair<key_string_type const&, basic_json_slice> pair_node_to_slice(map_node_type & pair) noexcept
 		{
 			auto& [key, value]{ pair };
 			return { key, value };
 		}
 
 	public:
-		constexpr auto as_array() const
+		using const_slice_type::as_array;
+
+		constexpr auto as_array()
 		{
 			return static_cast<array_type&>(*this) | std::views::transform(node_to_slice);
 		}
 
-		constexpr auto as_object() const
+		using const_slice_type::as_object;
+
+		constexpr auto as_object()
 		{
 			return static_cast<object_type&>(*this) | std::views::transform(pair_node_to_slice);
 		}
@@ -633,8 +526,8 @@ namespace bizwen
 		using array_type = Array;
 		using string_type = String;
 
-		using slice_type = basic_json_slice<node_type, string_type, array_type, object_type, HasInteger, HasUInteger>;
 		using const_slice_type = basic_const_json_slice;
+		using slice_type = basic_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
 		using json_type = basic_json<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
 
 		using number_type = node_type::number_type;
@@ -652,10 +545,10 @@ namespace bizwen
 		using kind_t = node_type::kind_t;
 		using stor_t = node_type::stor_t;
 
-		friend class basic_json<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
-		friend class basic_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
+		friend json_type;
+		friend slice_type;
 
-		json_type const* json_{};
+		json_type* json_{};
 
 		constexpr kind_t kind() const noexcept
 		{
@@ -755,12 +648,17 @@ namespace bizwen
 		constexpr basic_const_json_slice(basic_const_json_slice const& rhs) noexcept = default;
 
 		constexpr basic_const_json_slice(json_type const& j) noexcept
-		    : json_(&j)
+		    : json_(const_cast<json_type*>(&j))
 		{
 		}
 
 		constexpr basic_const_json_slice(node_type const& n) noexcept
-		    : json_(reinterpret_cast<json_type const*>(&n))
+		    : json_(const_cast<json_type*>(reinterpret_cast<json_type const*>(&n)))
+		{
+		}
+
+		constexpr basic_const_json_slice(slice_type const& s) noexcept
+		    : json_(s.json_)
 		{
 		}
 
@@ -801,23 +699,23 @@ namespace bizwen
 			return nulljson;
 		}
 
-		constexpr explicit operator const string_type&() const&
+		constexpr explicit operator string_type const&() const&
 		{
 			if (!string())
 				throw std::runtime_error("json error: value isn't a string.");
 
-			return *static_cast<string_type const*>(json_->node_.stor_.str_);
+			return *static_cast<string_type const*>(stor().str_);
 		}
 
-		constexpr explicit operator const array_type&() const&
+		constexpr explicit operator array_type const&() const&
 		{
 			if (!array())
 				throw std::runtime_error("json error: value isn't an array.");
 
-			return *static_cast<array_type const*>(json_->node_.stor_.arr_);
+			return *static_cast<array_type const*>(stor().arr_);
 		}
 
-		constexpr explicit operator const object_type&() const&
+		constexpr explicit operator object_type const&() const&
 		{
 			if (!object())
 				throw std::runtime_error("json error: value isn't an object.");
@@ -848,13 +746,13 @@ namespace bizwen
 			if (!object())
 				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
 
-			auto const& o = *static_cast<object_type const*>(stor().obj_);
+			auto& o = *static_cast<object_type*>(stor().obj_);
 			auto i = o.find(k);
 
 			if (i == o.end())
 				throw std::runtime_error("key does not exist.");
 
-			auto const& [key, v] = *i;
+			auto& [_, v] = *i;
 
 			return v;
 		}
@@ -867,13 +765,13 @@ namespace bizwen
 			if (!object())
 				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
 
-			auto const& o = *static_cast<object_type const*>(stor().obj_);
+			auto& o = *static_cast<object_type*>(stor().obj_);
 			auto i = o.find(k);
 
 			if (i == o.end())
 				throw std::runtime_error("key does not exist.");
 
-			auto const& [_, v] = *i;
+			auto& [_, v] = *i;
 
 			return v;
 		}
@@ -883,13 +781,13 @@ namespace bizwen
 			if (!object())
 				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
 
-			auto const& o = *static_cast<object_type const*>(stor().obj_);
+			auto& o = *static_cast<object_type*>(stor().obj_);
 			auto i = o.find(k);
 
 			if (i == o.end())
 				throw std::runtime_error("key does not exist.");
 
-			auto const& [_, v] = *i;
+			auto& [_, v] = *i;
 
 			return v;
 		}
@@ -899,23 +797,18 @@ namespace bizwen
 			if (!array())
 				throw std::runtime_error("json error: value isn't an array but is accessed using operator[].");
 
-			auto const& a = *static_cast<array_type const*>(stor().arr_);
+			auto& a = *static_cast<array_type*>(stor().arr_);
 
 			return a[pos];
 		}
 
-		constexpr basic_const_json_slice(slice_type const& s)
-		{
-			json_ = s.json_;
-		}
-
 	private:
-		static constexpr basic_const_json_slice node_to_slice(node_type & node) noexcept
+		static constexpr basic_const_json_slice node_to_slice(node_type const& node) noexcept
 		{
 			return node;
 		}
 
-		static constexpr std::pair<string_type const&, basic_const_json_slice> pair_node_to_slice(map_node_type & pair) noexcept
+		static constexpr std::pair<key_string_type const&, basic_const_json_slice> pair_node_to_slice(map_node_type const& pair) noexcept
 		{
 			auto& [key, value]{ pair };
 			return { key, value };
@@ -924,12 +817,12 @@ namespace bizwen
 	public:
 		constexpr auto as_array() const
 		{
-			return static_cast<array_type&>(*this) | std::views::transform(node_to_slice);
+			return static_cast<array_type const&>(*this) | std::views::transform(node_to_slice);
 		}
 
 		constexpr auto as_object() const
 		{
-			return static_cast<object_type&>(*this) | std::views::transform(pair_node_to_slice);
+			return static_cast<object_type const&>(*this) | std::views::transform(pair_node_to_slice);
 		}
 	};
 
@@ -967,8 +860,8 @@ namespace bizwen
 		using kind_t = node_type::kind_t;
 		using stor_t = node_type::stor_t;
 
-		friend class basic_const_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
-		friend class basic_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
+		friend const_slice_type;
+		friend slice_type;
 
 		static_assert(std::integral<char_type>);
 		static_assert(std::integral<key_char_type>);
@@ -1466,7 +1359,7 @@ namespace bizwen
 	private:
 		struct pair
 		{
-			string_type key;
+			key_string_type key;
 			basic_json value;
 		};
 
@@ -1522,14 +1415,14 @@ namespace bizwen
 		template <typename... Ts>
 		object(Ts&&...) -> object<get_pair_num(type_list<Ts...>{})>;
 
-		template <typename... Ts>
 		struct array
 		{
 		private:
 			basic_json json;
 
 		public:
-			array(Ts... ts)
+			template <typename... Ts>
+			array(Ts&&... ts)
 			    requires(std::constructible_from<basic_json, Ts> && ...)
 			{
 				array_type arr;
