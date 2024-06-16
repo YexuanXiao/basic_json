@@ -1216,7 +1216,7 @@ namespace bizwen
 		{
 			rollbacker_map_all_ rollbacker(obj);
 			alloc_guard_<object_type> guard(*this);
-			stor().arr_ = new (guard.get()) object_type(std::move(obj));
+			stor().obj_ = new (guard.get()) object_type(std::move(obj));
 			guard.release();
 			rollbacker.release();
 			kind(kind_t::object);
@@ -1426,7 +1426,7 @@ namespace bizwen
 				for (auto& value : arr)
 				{
 					arr_.reserve(N);
-					arr.push_back(std::move(value));
+					arr_.push_back(std::move(value));
 				}
 
 				return arr_;
