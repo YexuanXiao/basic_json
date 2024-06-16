@@ -908,7 +908,7 @@ namespace bizwen
 			return typename traits_t::template rebind_alloc<T>(node_).deallocate(p, 1);
 		}
 
-		void destroy() noexcept
+		constexpr void destroy() noexcept
 		{
 			auto k = kind();
 			auto& s = stor();
