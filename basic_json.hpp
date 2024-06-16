@@ -312,7 +312,7 @@ namespace bizwen
 			bool is_string = string();
 			bool is_empty = empty();
 
-			if (!is_string || !is_empty)
+			if (!is_string && !is_empty)
 				throw std::runtime_error("json error: current value is not empty or not a string.");
 
 			if (is_string)
@@ -335,7 +335,7 @@ namespace bizwen
 			bool is_string = string();
 			bool is_empty = empty();
 
-			if (!is_string || !is_empty)
+			if (!is_string && !is_empty)
 				throw std::runtime_error("json error: current value is not empty or not a string.");
 
 			if (is_string)
@@ -358,7 +358,7 @@ namespace bizwen
 			bool is_string = string();
 			bool is_empty = empty();
 
-			if (!is_string || !is_empty)
+			if (!is_string && !is_empty)
 				throw std::runtime_error("json error: current value is not empty or not a string.");
 
 			if (is_string)
@@ -384,7 +384,7 @@ namespace bizwen
 			bool is_string = string();
 			bool is_empty = empty();
 
-			if (!is_string || !is_empty)
+			if (!is_string && !is_empty)
 				throw std::runtime_error("json error: current value is not empty or not a string.");
 
 			if (is_string)
@@ -407,7 +407,7 @@ namespace bizwen
 			bool is_null = null();
 			bool is_empty = empty();
 
-			if (!is_null || !is_empty)
+			if (!is_null && !is_empty)
 				throw std::runtime_error("json error: current value is not empty or not null.");
 
 			if (is_empty)
@@ -908,7 +908,7 @@ namespace bizwen
 			return typename traits_t::template rebind_alloc<T>(node_).deallocate(p, 1);
 		}
 
-		void destroy() noexcept
+		constexpr void destroy() noexcept
 		{
 			auto k = kind();
 			auto& s = stor();
@@ -1216,7 +1216,7 @@ namespace bizwen
 		{
 			rollbacker_map_all_ rollbacker(obj);
 			alloc_guard_<object_type> guard(*this);
-			stor().arr_ = new (guard.get()) object_type(std::move(obj));
+			stor().obj_ = new (guard.get()) object_type(std::move(obj));
 			guard.release();
 			rollbacker.release();
 			kind(kind_t::object);
@@ -1226,12 +1226,12 @@ namespace bizwen
 		{
 			kind(kind_t{});
 			stor() = stor_t{};
-			reinterpret_cast<node_type&>(*this) = std::move(n);
+			node_ = std::move(n);
 		}
 
 		[[nodiscard("discard nodes will cause leaks")]] constexpr operator node_type() && noexcept
 		{
-			auto node = reinterpret_cast<node_type&>(*this);
+			auto node = node_;
 			kind(kind_t{});
 			stor() = {};
 
@@ -1312,7 +1312,7 @@ namespace bizwen
 					auto const& [rkey, rvalue] = *first;
 					basic_json temp;
 					temp.clone(reinterpret_cast<basic_json const&>(rvalue));
-					lobj.emplace(rkey, reinterpret_cast<node_type&&>(std::move(temp)));
+					lobj.emplace(rkey, std::move(temp.node_));
 				}
 
 				rollbacker.release();
@@ -1426,7 +1426,7 @@ namespace bizwen
 				for (auto& value : arr)
 				{
 					arr_.reserve(N);
-					arr.push_back(std::move(value));
+					arr_.push_back(std::move(value));
 				}
 
 				return arr_;
