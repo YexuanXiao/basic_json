@@ -153,13 +153,13 @@ namespace bizwen
 		using typename const_slice_type::kind_t;
 		using typename const_slice_type::stor_t;
 
-		using const_slice_type::json_;
+		using const_slice_type::node_;
 
 		using const_slice_type::stor;
 
 		constexpr stor_t& stor() noexcept
 		{
-			return json_->node_.stor_;
+			return node_->stor_;
 		}
 
 	public:
@@ -175,9 +175,9 @@ namespace bizwen
 
 		constexpr void swap(basic_json_slice& rhs) noexcept
 		{
-			auto temp = json_;
-			json_ = rhs.json_;
-			rhs.json_ = temp;
+			auto temp = node_;
+			node_ = rhs.node_;
+			rhs.node_ = temp;
 		}
 
 		friend constexpr void swap(basic_json_slice& lhs, basic_json_slice& rhs) noexcept
@@ -234,10 +234,10 @@ namespace bizwen
 	private:
 		constexpr void allocate_object()
 		{
-			typename json_type::template alloc_guard_<object_type> guard(*json_);
+			typename json_type::template alloc_guard_<object_type> guard(*node_);
 			stor().obj_ = new (guard.get()) object_type();
 			guard.release();
-			(*json_).kind(kind_t::object);
+			node_->kind_ = kind_t::object;
 		}
 
 	public:
@@ -321,10 +321,10 @@ namespace bizwen
 			}
 			else // empty
 			{
-				typename json_type::template alloc_guard_<string_type> guard(*json_);
+				typename json_type::template alloc_guard_<string_type> guard(*node_);
 				stor().str_ = new (guard.get()) string_type(str);
 				guard.release();
-				(*json_).kind(kind_t::string);
+				node_->kind_ = kind_t::string;
 			}
 
 			return *this;
@@ -344,10 +344,10 @@ namespace bizwen
 			}
 			else // empty
 			{
-				typename json_type::template alloc_guard_<string_type> guard(*json_);
+				typename json_type::template alloc_guard_<string_type> guard(*node_);
 				stor().str_ = new (guard.get()) string_type(std::move(str));
 				guard.release();
-				(*json_).kind(kind_t::string);
+				node_->kind_ = kind_t::string;
 			}
 
 			return *this;
@@ -367,10 +367,10 @@ namespace bizwen
 			}
 			else // empty
 			{
-				typename json_type::template alloc_guard_<string_type> guard(*json_);
+				typename json_type::template alloc_guard_<string_type> guard(*node_);
 				stor().str_ = new (guard.get()) string_type(str);
 				guard.release();
-				(*json_).kind(kind_t::string);
+				node_->kind_ = kind_t::string;
 			}
 
 			return *this;
@@ -393,10 +393,10 @@ namespace bizwen
 			}
 			else
 			{
-				typename json_type::template alloc_guard_<string_type> guard(*json_);
+				typename json_type::template alloc_guard_<string_type> guard(*node_);
 				stor().str_ = new (guard.get()) string_type(str);
 				guard.release();
-				(*json_).kind(kind_t::string);
+				node_->kind_ = kind_t::string;
 			}
 
 			return *this;
@@ -411,7 +411,7 @@ namespace bizwen
 				throw std::runtime_error("json error: current value is not empty or not null.");
 
 			if (is_empty)
-				(*json_).kind(kind_t::null);
+				node_->kind_ = kind_t::null;
 
 			return *this;
 		}
@@ -429,7 +429,7 @@ namespace bizwen
 					throw std::runtime_error("json error: current value is not empty or not bool.");
 
 				if (is_empty)
-					(*json_).kind(n ? kind_t::true_value : kind_t::false_value);
+					node_->kind_ = (n ? kind_t::true_value : kind_t::false_value);
 			}
 			else if constexpr (HasInteger && std::signed_integral<T>)
 			{
@@ -439,8 +439,8 @@ namespace bizwen
 				if (!is_number && !is_empty)
 					throw std::runtime_error("json error: current value is not empty or not a number.");
 
-				(*json_).stor().int_ = n;
-				(*json_).kind(kind_t::integer);
+				node_->stor_.int_ = n;
+				node_->kind_ = kind_t::integer;
 			}
 			else if constexpr (HasUInteger && std::unsigned_integral<T>)
 			{
@@ -450,8 +450,8 @@ namespace bizwen
 				if (!is_number && !is_empty)
 					throw std::runtime_error("json error: current value is not empty or not a number.");
 
-				(*json_).stor().uint_ = n;
-				(*json_).kind(kind_t::uinteger);
+				node_->stor_.uint_ = n;
+				node_->kind_ = kind_t::uinteger;
 			}
 			else // fallback
 			{
@@ -461,8 +461,8 @@ namespace bizwen
 				if (!is_number && !is_empty)
 					throw std::runtime_error("json error: current value is not empty or not a number.");
 
-				(*json_).stor().num_ = n;
-				(*json_).kind(kind_t::number);
+				node_->stor_.num_ = n;
+				node_->kind_ = kind_t::number;
 			}
 
 			return *this;
@@ -470,14 +470,14 @@ namespace bizwen
 
 		constexpr basic_json_slice& operator=(json_type& j)
 		{
-			json_ = &j;
+			node_ = std::addressof(j.node_);
 
 			return *this;
 		}
 
 		constexpr basic_json_slice& operator=(node_type& n)
 		{
-			json_ = reinterpret_cast<json_type*>(&n);
+			node_ = std::addressof(n);
 
 			return *this;
 		}
@@ -548,18 +548,18 @@ namespace bizwen
 		friend json_type;
 		friend slice_type;
 
-		json_type* json_{};
+		node_type* node_{};
 
 		constexpr kind_t kind() const noexcept
 		{
-			assert(json_);
+			assert(node_);
 
-			return json_->node_.kind_;
+			return node_->kind_;
 		}
 
 		constexpr stor_t const& stor() const noexcept
 		{
-			return json_->node_.stor_;
+			return node_->stor_;
 		}
 
 	public:
@@ -629,9 +629,9 @@ namespace bizwen
 
 		constexpr void swap(basic_const_json_slice& rhs) noexcept
 		{
-			auto temp = json_;
-			json_ = rhs.json_;
-			rhs.json_ = temp;
+			auto temp = node_;
+			node_ = rhs.node_;
+			rhs.node_ = temp;
 		}
 
 		friend constexpr void swap(basic_const_json_slice& lhs, basic_const_json_slice& rhs) noexcept
@@ -648,17 +648,17 @@ namespace bizwen
 		constexpr basic_const_json_slice(basic_const_json_slice const& rhs) noexcept = default;
 
 		constexpr basic_const_json_slice(json_type const& j) noexcept
-		    : json_(const_cast<json_type*>(&j))
+		    : node_(const_cast<node_type*>(std::addressof(j.node_)))
 		{
 		}
 
 		constexpr basic_const_json_slice(node_type const& n) noexcept
-		    : json_(const_cast<json_type*>(reinterpret_cast<json_type const*>(&n)))
+		    : node_(const_cast<node_type*>(std::addressof(n)))
 		{
 		}
 
 		constexpr basic_const_json_slice(slice_type const& s) noexcept
-		    : json_(s.json_)
+		    : node_(s.node_)
 		{
 		}
 
@@ -897,28 +897,28 @@ namespace bizwen
 		}
 
 		template <typename T>
-		constexpr T* alloc()
+		static constexpr T* alloc_from_node(node_type& node)
 		{
-			return typename traits_t::template rebind_alloc<T>(node_).allocate(1);
+			return typename traits_t::template rebind_alloc<T>(node).allocate(1);
 		}
 
 		template <typename T>
-		constexpr void dealloc(T* p) noexcept
+		static constexpr void dealloc_from_node(node_type& node, T* p) noexcept
 		{
-			return typename traits_t::template rebind_alloc<T>(node_).deallocate(p, 1);
+			return typename traits_t::template rebind_alloc<T>(node).deallocate(p, 1);
 		}
 
-		constexpr void destroy() noexcept
+		static constexpr void destroy_node(node_type& node) noexcept
 		{
-			auto k = kind();
-			auto& s = stor();
+			auto k = node.kind_;
+			auto& s = node.stor_;
 
 			switch (k)
 			{
 			case kind_t::string: {
 				auto p = static_cast<string_type*>(s.str_);
-				(*p).~string_type();
-				dealloc(static_cast<string_type*>(s.str_));
+				p->~string_type();
+				dealloc_from_node(node, p);
 
 				break;
 			}
@@ -931,8 +931,8 @@ namespace bizwen
 					json.destroy();
 				}
 
-				(*p).~array_type();
-				dealloc(p);
+				p->~array_type();
+				dealloc_from_node(node, p);
 
 				break;
 			}
@@ -945,8 +945,8 @@ namespace bizwen
 					json.destroy();
 				}
 
-				(*p).~object_type();
-				dealloc(p);
+				p->~object_type();
+				dealloc_from_node(node, p);
 
 				break;
 			}
@@ -956,20 +956,25 @@ namespace bizwen
 			}
 		}
 
+		constexpr void destroy() noexcept
+		{
+			destroy_node(node_);
+		}
+
 		template <typename T>
 		struct alloc_guard_
 		{
 			T* ptr;
-			basic_json& json;
+			node_type& node;
 
 			constexpr alloc_guard_() noexcept = delete;
 
 			constexpr alloc_guard_(alloc_guard_ const&) noexcept = delete;
 
-			constexpr alloc_guard_(basic_json& j)
-			    : json(j)
+			constexpr explicit alloc_guard_(node_type& n)
+			    : node(n)
 			{
-				ptr = json.alloc<T>();
+				ptr = basic_json::alloc_from_node<T>(node);
 			}
 
 			constexpr void release() noexcept
@@ -987,7 +992,7 @@ namespace bizwen
 			constexpr ~alloc_guard_()
 			{
 				if (ptr)
-					json.dealloc(ptr);
+					basic_json::dealloc_from_node(node, ptr);
 			}
 		};
 
@@ -1015,7 +1020,7 @@ namespace bizwen
 
 				for (auto begin = array.begin(); begin != sentry; ++begin)
 				{
-					reinterpret_cast<basic_json&>(*begin).destroy();
+					basic_json::destroy_node(*begin);
 				}
 			}
 		};
@@ -1049,7 +1054,7 @@ namespace bizwen
 
 				for (auto begin = array.begin(); begin != end; ++begin)
 				{
-					reinterpret_cast<basic_json&>(*begin).destroy();
+					basic_json::destroy_node(*begin);
 				}
 			}
 		};
@@ -1081,7 +1086,7 @@ namespace bizwen
 				for (auto begin = object.begin(); begin != end; ++begin)
 				{
 					auto&& [key, value] = *begin;
-					reinterpret_cast<basic_json&>(value).destroy();
+					basic_json::destroy_node(value);
 				}
 			}
 		};
@@ -1161,7 +1166,7 @@ namespace bizwen
 
 		constexpr explicit basic_json(string_type v)
 		{
-			alloc_guard_<string_type> guard(*this);
+			alloc_guard_<string_type> guard(node_);
 			stor().str_ = new (guard.get()) string_type(std::move(v));
 			guard.release();
 			kind(kind_t::string);
@@ -1169,7 +1174,7 @@ namespace bizwen
 
 		constexpr basic_json(char_type const* begin, char_type const* end)
 		{
-			alloc_guard_<string_type> guard(*this);
+			alloc_guard_<string_type> guard(node_);
 			stor().str_ = new (guard.get()) string_type(begin, end);
 			guard.release();
 			kind(kind_t::string);
@@ -1177,7 +1182,7 @@ namespace bizwen
 
 		constexpr basic_json(char_type const* str, string_type::size_type count)
 		{
-			alloc_guard_<string_type> guard(*this);
+			alloc_guard_<string_type> guard(node_);
 			stor().str_ = new (guard.get()) string_type(str, count);
 			guard.release();
 			kind(kind_t::string);
@@ -1185,7 +1190,7 @@ namespace bizwen
 
 		constexpr explicit basic_json(char_type const* str)
 		{
-			alloc_guard_<string_type> guard(*this);
+			alloc_guard_<string_type> guard(node_);
 			stor().str_ = new (guard.get()) string_type(str);
 			guard.release();
 			kind(kind_t::string);
@@ -1196,7 +1201,7 @@ namespace bizwen
 		    && (std::is_convertible_v<StrLike const&, char_type const*> == false)
 		constexpr basic_json(StrLike const& str)
 		{
-			alloc_guard_<string_type> guard(*this);
+			alloc_guard_<string_type> guard(node_);
 			stor().str_ = new (guard.get()) string_type(str);
 			guard.release();
 			kind(kind_t::string);
@@ -1205,7 +1210,7 @@ namespace bizwen
 		constexpr basic_json(array_type arr)
 		{
 			rollbacker_array_all_ rollbacker(arr);
-			alloc_guard_<array_type> guard(*this);
+			alloc_guard_<array_type> guard(node_);
 			stor().arr_ = new (guard.get()) array_type(std::move(arr));
 			guard.release();
 			rollbacker.release();
@@ -1215,7 +1220,7 @@ namespace bizwen
 		constexpr basic_json(object_type obj)
 		{
 			rollbacker_map_all_ rollbacker(obj);
-			alloc_guard_<object_type> guard(*this);
+			alloc_guard_<object_type> guard(node_);
 			stor().obj_ = new (guard.get()) object_type(std::move(obj));
 			guard.release();
 			rollbacker.release();
@@ -1239,17 +1244,17 @@ namespace bizwen
 		}
 
 	private:
-		constexpr void clone(const basic_json& rhs)
+		static constexpr void clone_node(node_type& lhs, node_type const& rhs)
 		{
-			auto rk = rhs.kind();
-			auto const& rs = rhs.stor();
-			auto& s = stor();
+			auto rk = rhs.kind_;
+			auto const& rs = rhs.stor_;
+			auto& s = lhs.stor_;
 
 			switch (rk)
 			{
 			case kind_t::string: {
 				auto const& rstr = *static_cast<string_type const*>(rs.str_);
-				alloc_guard_<string_type> mem(*this);
+				alloc_guard_<string_type> mem(lhs);
 				auto lptr = mem.get();
 				lptr = new (lptr) string_type(rstr);
 				mem.release();
@@ -1260,7 +1265,7 @@ namespace bizwen
 				if constexpr (std::is_trivially_copyable_v<allocator_type>)
 				{
 					auto const& rarr = *static_cast<array_type const*>(rs.arr_);
-					alloc_guard_<array_type> guard(*this);
+					alloc_guard_<array_type> guard(lhs);
 					auto lptr = new (guard.get()) array_type(rarr);
 					array_type& larr{ *lptr };
 					auto sentry = larr.begin();
@@ -1270,7 +1275,7 @@ namespace bizwen
 					auto last = rarr.end();
 					for (; first != last; ++sentry, ++first)
 					{
-						reinterpret_cast<basic_json&>(*sentry).clone(reinterpret_cast<basic_json const&>(*first));
+						clone_node(*sentry, *first);
 					}
 
 					guard.release();
@@ -1279,7 +1284,7 @@ namespace bizwen
 				else
 				{
 					auto const& rarr = *static_cast<array_type const*>(rs.arr_);
-					alloc_guard_<array_type> guard(*this);
+					alloc_guard_<array_type> guard(lhs);
 					auto lptr = new (guard.get()) array_type();
 					array_type& larr{ *lptr };
 					larr.reserve(rarr.size());
@@ -1289,7 +1294,9 @@ namespace bizwen
 					auto last = rarr.end();
 					for (; first != last; ++first)
 					{
-						larr.push_back(basic_json{ reinterpret_cast<basic_json const&>(*first) });
+						basic_json temp;
+						clone_node(temp.node_, *first);
+						larr.push_back(std::move(temp));
 					}
 
 					guard.release();
@@ -1299,7 +1306,7 @@ namespace bizwen
 			}
 			case kind_t::object: {
 				auto const& robj = *static_cast<object_type const*>(rs.obj_);
-				alloc_guard_<object_type> guard(*this);
+				alloc_guard_<object_type> guard(lhs);
 				auto lptr = new (guard.get()) object_type();
 				object_type& lobj{ *lptr };
 				rollbacker_map_all_ rollbacker(lobj);
@@ -1311,7 +1318,7 @@ namespace bizwen
 				{
 					auto const& [rkey, rvalue] = *first;
 					basic_json temp;
-					temp.clone(reinterpret_cast<basic_json const&>(rvalue));
+					clone_node(temp.node_, rvalue);
 					lobj.emplace(rkey, std::move(temp.node_));
 				}
 
@@ -1325,7 +1332,12 @@ namespace bizwen
 			}
 			}
 
-			kind(rk);
+			lhs.kind_ = rk;
+		}
+
+		constexpr void clone(const basic_json& rhs)
+		{
+			clone_node(node_, rhs.node_);
 		}
 
 	public:
