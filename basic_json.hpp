@@ -312,7 +312,7 @@ namespace bizwen
 			bool is_string = string();
 			bool is_empty = empty();
 
-			if (!is_string || !is_empty)
+			if (!is_string && !is_empty)
 				throw std::runtime_error("json error: current value is not empty or not a string.");
 
 			if (is_string)
@@ -335,7 +335,7 @@ namespace bizwen
 			bool is_string = string();
 			bool is_empty = empty();
 
-			if (!is_string || !is_empty)
+			if (!is_string && !is_empty)
 				throw std::runtime_error("json error: current value is not empty or not a string.");
 
 			if (is_string)
@@ -358,7 +358,7 @@ namespace bizwen
 			bool is_string = string();
 			bool is_empty = empty();
 
-			if (!is_string || !is_empty)
+			if (!is_string && !is_empty)
 				throw std::runtime_error("json error: current value is not empty or not a string.");
 
 			if (is_string)
@@ -384,7 +384,7 @@ namespace bizwen
 			bool is_string = string();
 			bool is_empty = empty();
 
-			if (!is_string || !is_empty)
+			if (!is_string && !is_empty)
 				throw std::runtime_error("json error: current value is not empty or not a string.");
 
 			if (is_string)
@@ -407,7 +407,7 @@ namespace bizwen
 			bool is_null = null();
 			bool is_empty = empty();
 
-			if (!is_null || !is_empty)
+			if (!is_null && !is_empty)
 				throw std::runtime_error("json error: current value is not empty or not null.");
 
 			if (is_empty)
