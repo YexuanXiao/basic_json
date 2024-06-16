@@ -1226,12 +1226,12 @@ namespace bizwen
 		{
 			kind(kind_t{});
 			stor() = stor_t{};
-			reinterpret_cast<node_type&>(*this) = std::move(n);
+			node_ = std::move(n);
 		}
 
 		[[nodiscard("discard nodes will cause leaks")]] constexpr operator node_type() && noexcept
 		{
-			auto node = reinterpret_cast<node_type&>(*this);
+			auto node = node_;
 			kind(kind_t{});
 			stor() = {};
 
@@ -1312,7 +1312,7 @@ namespace bizwen
 					auto const& [rkey, rvalue] = *first;
 					basic_json temp;
 					temp.clone(reinterpret_cast<basic_json const&>(rvalue));
-					lobj.emplace(rkey, reinterpret_cast<node_type&&>(std::move(temp)));
+					lobj.emplace(rkey, std::move(temp.node_));
 				}
 
 				rollbacker.release();
