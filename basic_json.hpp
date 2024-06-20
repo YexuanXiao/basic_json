@@ -1346,12 +1346,12 @@ namespace bizwen
 			destroy();
 		}
 
-		constexpr slice_type slice()
+		constexpr slice_type slice() noexcept
 		{
 			return *this;
 		}
 
-		constexpr const_slice_type slice() const
+		constexpr const_slice_type slice() const noexcept
 		{
 			return *this;
 		}
