@@ -1139,6 +1139,11 @@ namespace bizwen
 
 		constexpr basic_json(decltype(nullptr)) noexcept = delete; // prevent implicit construct string
 
+		constexpr basic_json(nulljson_t) noexcept
+		{
+			kind(kind_t::null);
+		}
+
 		template <typename T>
 		    requires std::is_arithmetic_v<T>
 		constexpr basic_json(T n) noexcept
