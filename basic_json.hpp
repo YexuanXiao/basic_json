@@ -32,6 +32,15 @@ namespace bizwen
 	    bool HasInteger = true, bool HasUInteger = true>
 	class basic_json;
 
+	namespace detail
+	{
+		template <typename Node, typename String,
+		    typename Array,
+		    typename Object,
+		    bool HasInteger, bool HasUInteger>
+		struct basic_json_slice_common_base;
+	}
+
 	template <typename Node = basic_json_node<>, typename String = std::string,
 	    typename Array = std::vector<Node>,
 	    typename Object = std::map<String, Node>,
@@ -67,6 +76,12 @@ namespace bizwen
 		    typename Object,
 		    bool HasInteger, bool HasUInteger>
 		friend class basic_json;
+
+		template <typename Node, typename String,
+		    typename Array,
+		    typename Object,
+		    bool HasInteger, bool HasUInteger>
+		friend struct detail::basic_json_slice_common_base;
 
 		template <typename Node, typename String,
 		    typename Array,
@@ -114,64 +129,418 @@ namespace bizwen
 		constexpr basic_json_node& operator=(basic_json_node&& rhs) noexcept = default;
 	};
 
+	namespace detail
+	{
+		template <typename Object>
+		concept transparently_comparable_associative = requires {
+			typename Object::key_compare;
+			typename Object::key_compare::is_transparent;
+		};
+
+		template <typename Object>
+		concept transparently_comparable_unordered_associative = requires {
+			typename Object::key_equal;
+			typename Object::key_equal::is_transparent;
+			typename Object::hasher;
+			typename Object::hasher::is_transparent;
+		};
+
+		template <typename Object>
+		concept transparently_comparable_json_object = transparently_comparable_associative<Object>
+		    || transparently_comparable_unordered_associative<Object>;
+
+		template <typename KeyStrLike, typename Object>
+		concept noncovertible_to_key_char_cptr = !std::is_convertible_v<KeyStrLike const&, typename Object::key_type::value_type const*>;
+
+		template <typename Node, typename String,
+		    typename Array,
+		    typename Object,
+		    bool HasInteger, bool HasUInteger>
+		struct basic_json_slice_common_base
+		{
+			static inline constexpr bool has_integer = HasInteger;
+			static inline constexpr bool has_uinteger = HasUInteger;
+
+			using node_type = Node;
+			using object_type = Object;
+			using value_type = Node;
+			using array_type = Array;
+			using string_type = String;
+
+			using const_slice_type = basic_const_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
+			using slice_type = basic_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
+			using json_type = basic_json<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
+
+			using number_type = node_type::number_type;
+			using integer_type = node_type::integer_type;
+			using uinteger_type = node_type::uinteger_type;
+
+			using char_type = string_type::value_type;
+			using map_node_type = object_type::value_type;
+			using allocator_type = node_type::allocator_type;
+			using key_string_type = object_type::key_type;
+			using key_char_type = key_string_type::value_type;
+
+			node_type* node_{}; // made private in derived classes
+
+		private:
+			using traits_t = std::allocator_traits<allocator_type>;
+			using kind_t = node_type::kind_t;
+			using stor_t = node_type::stor_t;
+
+			friend json_type;
+
+			constexpr kind_t kind() const noexcept
+			{
+				assert(node_);
+
+				return node_->kind_;
+			}
+
+			constexpr stor_t const& stor() const noexcept
+			{
+				return node_->stor_;
+			}
+
+		public:
+			[[nodiscard]] constexpr bool empty() const noexcept
+			{
+				return kind() == kind_t::empty;
+			}
+
+			[[nodiscard]] constexpr bool string() const noexcept
+			{
+				return kind() == kind_t::string;
+			}
+
+			[[nodiscard]] constexpr bool null() const noexcept
+			{
+				return kind() == kind_t::null;
+			}
+
+			[[nodiscard]] constexpr bool boolean() const noexcept
+			{
+				auto k = kind();
+
+				return k == kind_t::true_value || k == kind_t::false_value;
+			}
+
+			[[nodiscard]] constexpr bool number() const noexcept
+			{
+				auto k = kind();
+
+				bool is_integer{};
+				bool is_uinteger{};
+
+				if constexpr (HasInteger)
+				{
+					is_integer = k == kind_t::integer;
+				}
+
+				if constexpr (HasUInteger)
+				{
+					is_uinteger = k == kind_t::uinteger;
+				}
+
+				return k == kind_t::number || is_integer || is_uinteger;
+			}
+
+			[[nodiscard]] constexpr bool object() const noexcept
+			{
+				return kind() == kind_t::object;
+			}
+
+			[[nodiscard]] constexpr bool array() const noexcept
+			{
+				return kind() == kind_t::array;
+			}
+
+			[[nodiscard]] constexpr bool integer() const noexcept
+			    requires HasInteger
+			{
+				return kind() == kind_t::integer;
+			}
+
+			[[nodiscard]] constexpr bool uinteger() const noexcept
+			    requires HasUInteger
+			{
+				return kind() == kind_t::uinteger;
+			}
+
+			constexpr explicit operator bool() const
+			{
+				if (!boolean())
+					throw std::runtime_error("json error: value not a boolean.");
+
+				auto k = kind();
+
+				return k == kind_t::true_value;
+			}
+
+			constexpr explicit operator number_type() const
+			{
+				auto k = kind();
+				auto s = stor();
+
+				if (k == kind_t::number)
+					return s.num_;
+				else if (k == kind_t::integer)
+					return s.int_;
+				else if (k == kind_t::uinteger)
+					return s.uint_;
+
+				throw std::runtime_error("json error: value isn't a number.");
+			}
+
+			constexpr explicit operator nulljson_t() const
+			{
+				if (!null())
+					throw std::runtime_error("json error: value isn't a null.");
+
+				return nulljson;
+			}
+
+			constexpr explicit operator string_type const&() const&
+			{
+				if (!string())
+					throw std::runtime_error("json error: value isn't a string.");
+
+				return *static_cast<string_type const*>(stor().str_);
+			}
+
+			constexpr explicit operator array_type const&() const&
+			{
+				if (!array())
+					throw std::runtime_error("json error: value isn't an array.");
+
+				return *static_cast<array_type const*>(stor().arr_);
+			}
+
+			constexpr explicit operator object_type const&() const&
+			{
+				if (!object())
+					throw std::runtime_error("json error: value isn't an object.");
+
+				return *static_cast<object_type const*>(stor().obj_);
+			}
+
+			constexpr explicit operator integer_type() const
+			    requires HasInteger
+			{
+				if (!integer())
+					throw std::runtime_error("json error: value isn't an integer.");
+
+				return stor().int_;
+			}
+
+			constexpr explicit operator uinteger_type() const
+			    requires HasUInteger
+			{
+				if (!uinteger())
+					throw std::runtime_error("json error: value isn't an unsigned integer.");
+
+				return stor().uint_;
+			}
+
+			// defined after the class body of basic_const_json_slice
+
+			constexpr auto operator[](key_string_type const& k) const -> const_slice_type;
+
+			template <typename KeyStrLike>
+			    requires transparently_comparable_json_object<Object>
+			    && noncovertible_to_key_char_cptr<KeyStrLike, Object>
+			constexpr auto operator[](KeyStrLike const& k) const -> const_slice_type;
+
+			constexpr auto operator[](key_char_type const* k) const -> const_slice_type;
+
+			constexpr auto operator[](array_type::size_type pos) const -> const_slice_type;
+
+			constexpr auto as_array() const
+			{
+				constexpr auto node_to_slice = [](node_type const& node) static noexcept {
+					return const_slice_type{ node };
+				};
+				return static_cast<array_type const&>(*this) | std::views::transform(node_to_slice);
+			}
+
+			constexpr auto as_object() const
+			{
+				constexpr auto pair_node_to_slice = [](map_node_type const& pair) static noexcept {
+					auto& [key, value]{ pair };
+					return std::pair<key_string_type const&, const_slice_type>{ key, value };
+				};
+				return static_cast<object_type const&>(*this) | std::views::transform(pair_node_to_slice);
+			}
+		};
+	}
+
 	template <typename Node, typename String,
 	    typename Array,
 	    typename Object,
 	    bool HasInteger, bool HasUInteger>
-	class basic_json_slice: public basic_const_json_slice<Node, String, Array, Object, HasInteger, HasUInteger>
+	class basic_const_json_slice: public detail::basic_json_slice_common_base<Node, String, Array, Object, HasInteger, HasUInteger>
 	{
-	public:
-		using const_slice_type = basic_const_json_slice<Node, String, Array, Object, HasInteger, HasUInteger>;
-
-		using const_slice_type::has_integer;
-		using const_slice_type::has_uinteger;
-
-		using typename const_slice_type::node_type;
-		using typename const_slice_type::object_type;
-		using typename const_slice_type::value_type;
-		using typename const_slice_type::array_type;
-		using typename const_slice_type::string_type;
-
-		using typename const_slice_type::slice_type;
-		// using typename const_slice_type::const_slice_type;
-		using typename const_slice_type::json_type;
-
-		using typename const_slice_type::number_type;
-		using typename const_slice_type::integer_type;
-		using typename const_slice_type::uinteger_type;
-
-		using typename const_slice_type::char_type;
-		using typename const_slice_type::map_node_type;
-		using typename const_slice_type::allocator_type;
-		using typename const_slice_type::key_string_type;
-		using typename const_slice_type::key_char_type;
-
 	private:
-		friend json_type;
-		friend const_slice_type;
+		using base_type = detail::basic_json_slice_common_base<Node, String, Array, Object, HasInteger, HasUInteger>;
+		using base_type::node_;
 
-		using typename const_slice_type::kind_t;
-		using typename const_slice_type::stor_t;
+	public:
+		using typename base_type::json_type;
+		using typename base_type::node_type;
+		using typename base_type::slice_type;
 
-		using const_slice_type::node_;
-
-		using const_slice_type::stor;
-
-		constexpr stor_t& stor() noexcept
+		constexpr void swap(basic_const_json_slice& rhs) noexcept
 		{
-			return node_->stor_;
+			auto temp = node_;
+			node_ = rhs.node_;
+			rhs.node_ = temp;
 		}
 
+		friend constexpr void swap(basic_const_json_slice& lhs, basic_const_json_slice& rhs) noexcept
+		{
+			lhs.swap(rhs);
+		}
+
+		// similar to iterators, default construction is allowed, but except for operator=,
+		// operations on default-constructed slice cause undefined behavior.
+		constexpr basic_const_json_slice() noexcept = default;
+
+		constexpr basic_const_json_slice(basic_const_json_slice&&) noexcept = default;
+
+		constexpr basic_const_json_slice(basic_const_json_slice const&) noexcept = default;
+
+		constexpr basic_const_json_slice(json_type const& j) noexcept
+		    : base_type{ const_cast<node_type*>(std::addressof(j.node_)) }
+		{
+		}
+
+		constexpr basic_const_json_slice(node_type const& n) noexcept
+		    : base_type{ const_cast<node_type*>(std::addressof(n)) }
+		{
+		}
+
+		constexpr basic_const_json_slice(slice_type const& s) noexcept
+		    : base_type{ static_cast<base_type const&>(s) }
+		{
+		}
+
+		constexpr basic_const_json_slice& operator=(basic_const_json_slice const&) noexcept = default;
+
+		constexpr basic_const_json_slice& operator=(basic_const_json_slice&&) noexcept = default;
+	};
+
+	namespace detail
+	{
+		template <typename Node, typename String,
+		    typename Array,
+		    typename Object,
+		    bool HasInteger, bool HasUInteger>
+		constexpr auto basic_json_slice_common_base<Node, String, Array, Object, HasInteger, HasUInteger>::operator[](key_string_type const& k) const -> const_slice_type
+		{
+			if (!object())
+				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
+
+			auto& o = *static_cast<object_type*>(stor().obj_);
+			auto i = o.find(k);
+
+			if (i == o.end())
+				throw std::runtime_error("key does not exist.");
+
+			auto& [_, v] = *i;
+
+			return v;
+		}
+
+		template <typename Node, typename String,
+		    typename Array,
+		    typename Object,
+		    bool HasInteger, bool HasUInteger>
+		template <typename KeyStrLike>
+		    requires transparently_comparable_json_object<Object>
+		    && noncovertible_to_key_char_cptr<KeyStrLike, Object>
+		constexpr auto basic_json_slice_common_base<Node, String, Array, Object, HasInteger, HasUInteger>::operator[](KeyStrLike const& k) const -> const_slice_type
+		{
+			if (!object())
+				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
+
+			auto& o = *static_cast<object_type*>(stor().obj_);
+			auto i = o.find(k);
+
+			if (i == o.end())
+				throw std::runtime_error("key does not exist.");
+
+			auto& [_, v] = *i;
+
+			return v;
+		}
+
+		template <typename Node, typename String,
+		    typename Array,
+		    typename Object,
+		    bool HasInteger, bool HasUInteger>
+		constexpr auto basic_json_slice_common_base<Node, String, Array, Object, HasInteger, HasUInteger>::operator[](key_char_type const* k) const -> const_slice_type
+		{
+			if (!object())
+				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
+
+			auto& o = *static_cast<object_type*>(stor().obj_);
+			auto i = o.find(k);
+
+			if (i == o.end())
+				throw std::runtime_error("key does not exist.");
+
+			auto& [_, v] = *i;
+
+			return v;
+		}
+
+		template <typename Node, typename String,
+		    typename Array,
+		    typename Object,
+		    bool HasInteger, bool HasUInteger>
+		constexpr auto basic_json_slice_common_base<Node, String, Array, Object, HasInteger, HasUInteger>::operator[](array_type::size_type pos) const -> const_slice_type
+		{
+			if (!array())
+				throw std::runtime_error("json error: value isn't an array but is accessed using operator[].");
+
+			auto& a = *static_cast<array_type*>(stor().arr_);
+
+			return a[pos];
+		}
+	}
+
+	template <typename Node, typename String,
+	    typename Array,
+	    typename Object,
+	    bool HasInteger, bool HasUInteger>
+	class basic_json_slice: public detail::basic_json_slice_common_base<Node, String, Array, Object, HasInteger, HasUInteger>
+	{
+	private:
+		using base_type = detail::basic_json_slice_common_base<Node, String, Array, Object, HasInteger, HasUInteger>;
+		using base_type::node_;
+
 	public:
-		using const_slice_type::empty;
-		using const_slice_type::string;
-		using const_slice_type::null;
-		using const_slice_type::boolean;
-		using const_slice_type::number;
-		using const_slice_type::object;
-		using const_slice_type::array;
-		using const_slice_type::integer;
-		using const_slice_type::uinteger;
+		using typename base_type::allocator_type;
+		using typename base_type::array_type;
+		using typename base_type::char_type;
+		using typename base_type::json_type;
+		using typename base_type::node_type;
+		using typename base_type::object_type;
+		using typename base_type::string_type;
+
+		using typename base_type::key_char_type;
+		using typename base_type::key_string_type;
+		using typename base_type::map_node_type;
+
+		using base_type::array;
+		using base_type::boolean;
+		using base_type::empty;
+		using base_type::integer;
+		using base_type::null;
+		using base_type::number;
+		using base_type::object;
+		using base_type::string;
+		using base_type::uinteger;
 
 		constexpr void swap(basic_json_slice& rhs) noexcept
 		{
@@ -189,23 +558,23 @@ namespace bizwen
 		// operations on default-constructed slice cause undefined behavior.
 		constexpr basic_json_slice() noexcept = default;
 
-		constexpr basic_json_slice(basic_json_slice&& rhs) noexcept = default;
+		constexpr basic_json_slice(basic_json_slice&&) noexcept = default;
 
-		constexpr basic_json_slice(basic_json_slice const& rhs) noexcept = default;
+		constexpr basic_json_slice(basic_json_slice const&) noexcept = default;
 
 		constexpr basic_json_slice(json_type& j) noexcept
-		    : const_slice_type(j)
+		    : base_type{ std::addressof(j.node_) }
 		{
 		}
 
 		constexpr basic_json_slice(node_type& n) noexcept
-		    : const_slice_type(n)
+		    : base_type{ std::addressof(n) }
 		{
 		}
 
-		constexpr basic_json_slice& operator=(basic_json_slice const& rhs) noexcept = default;
+		constexpr basic_json_slice& operator=(basic_json_slice const&) noexcept = default;
 
-		constexpr basic_json_slice& operator=(basic_json_slice&& rhs) noexcept = default;
+		constexpr basic_json_slice& operator=(basic_json_slice&&) noexcept = default;
 
 		constexpr explicit operator string_type&() &
 		{
@@ -232,16 +601,32 @@ namespace bizwen
 		}
 
 	private:
+		using kind_t = node_type::kind_t;
+		using stor_t = node_type::stor_t;
+
+		using string_ator = std::allocator_traits<allocator_type>::template rebind_alloc<String>;
+		using string_ator_traits = std::allocator_traits<string_ator>;
+		using object_ator = std::allocator_traits<allocator_type>::template rebind_alloc<Object>;
+		using object_ator_traits = std::allocator_traits<object_ator>;
+
 		constexpr void allocate_object()
 		{
 			typename json_type::template alloc_guard_<object_type> guard(*node_);
-			stor().obj_ = new (guard.get()) object_type();
+			auto ator = object_ator(*node_);
+			auto rawptr = guard.get();
+			object_ator_traits::construct(ator, rawptr);
+			stor().obj_ = rawptr;
 			guard.release();
 			node_->kind_ = kind_t::object;
 		}
 
+		constexpr stor_t& stor() noexcept
+		{
+			return node_->stor_;
+		}
+
 	public:
-		using const_slice_type::operator[];
+		using base_type::operator[];
 
 		constexpr basic_json_slice operator[](key_string_type const& k)
 		{
@@ -261,8 +646,8 @@ namespace bizwen
 		}
 
 		template <typename KeyStrLike>
-		    requires std::convertible_to<KeyStrLike, key_string_type> // wrong, need check transparent comparable
-		    && (std::is_convertible_v<KeyStrLike const&, key_char_type const*> == false)
+		    requires detail::transparently_comparable_json_object<Object>
+		    && detail::noncovertible_to_key_char_cptr<KeyStrLike, Object>
 		constexpr basic_json_slice operator[](KeyStrLike const& k)
 		{
 			auto e = empty();
@@ -322,7 +707,10 @@ namespace bizwen
 			else // empty
 			{
 				typename json_type::template alloc_guard_<string_type> guard(*node_);
-				stor().str_ = new (guard.get()) string_type(str);
+				auto ator = string_ator(*node_);
+				auto rawptr = guard.get();
+				string_ator_traits::construct(ator, rawptr, str);
+				stor().str_ = rawptr;
 				guard.release();
 				node_->kind_ = kind_t::string;
 			}
@@ -345,7 +733,10 @@ namespace bizwen
 			else // empty
 			{
 				typename json_type::template alloc_guard_<string_type> guard(*node_);
-				stor().str_ = new (guard.get()) string_type(std::move(str));
+				auto ator = string_ator(*node_);
+				auto rawptr = guard.get();
+				string_ator_traits::construct(ator, rawptr, std::move(str));
+				stor().str_ = rawptr;
 				guard.release();
 				node_->kind_ = kind_t::string;
 			}
@@ -368,7 +759,10 @@ namespace bizwen
 			else // empty
 			{
 				typename json_type::template alloc_guard_<string_type> guard(*node_);
-				stor().str_ = new (guard.get()) string_type(str);
+				auto ator = string_ator(*node_);
+				auto rawptr = guard.get();
+				string_ator_traits::construct(ator, rawptr, str);
+				stor().str_ = rawptr;
 				guard.release();
 				node_->kind_ = kind_t::string;
 			}
@@ -378,7 +772,7 @@ namespace bizwen
 
 		template <typename StrLike>
 		    requires std::constructible_from<string_type, StrLike>
-		    && (std::is_convertible_v<StrLike const&, char_type const*> == false)
+		    && (!std::is_convertible_v<StrLike const&, char_type const*>)
 		constexpr basic_json_slice& operator=(StrLike const& str)
 		{
 			bool is_string = string();
@@ -394,7 +788,10 @@ namespace bizwen
 			else
 			{
 				typename json_type::template alloc_guard_<string_type> guard(*node_);
-				stor().str_ = new (guard.get()) string_type(str);
+				auto ator = string_ator(*node_);
+				auto rawptr = guard.get();
+				string_ator_traits::construct(ator, rawptr, str);
+				stor().str_ = rawptr;
 				guard.release();
 				node_->kind_ = kind_t::string;
 			}
@@ -402,7 +799,7 @@ namespace bizwen
 			return *this;
 		}
 
-		constexpr basic_json_slice& operator=(nulljson_t n)
+		constexpr basic_json_slice& operator=(nulljson_t)
 		{
 			bool is_null = null();
 			bool is_empty = empty();
@@ -468,361 +865,39 @@ namespace bizwen
 			return *this;
 		}
 
-		constexpr basic_json_slice& operator=(json_type& j)
+		constexpr basic_json_slice& operator=(json_type& j) noexcept
 		{
 			node_ = std::addressof(j.node_);
 
 			return *this;
 		}
 
-		constexpr basic_json_slice& operator=(node_type& n)
+		constexpr basic_json_slice& operator=(node_type& n) noexcept
 		{
 			node_ = std::addressof(n);
 
 			return *this;
 		}
 
-	private:
-		static constexpr basic_json_slice node_to_slice(node_type & node) noexcept
-		{
-			return node;
-		}
-
-		static constexpr std::pair<key_string_type const&, basic_json_slice> pair_node_to_slice(map_node_type & pair) noexcept
-		{
-			auto& [key, value]{ pair };
-			return { key, value };
-		}
-
-	public:
-		using const_slice_type::as_array;
+		using base_type::as_array;
 
 		constexpr auto as_array()
 		{
+			constexpr auto node_to_slice = [](node_type const& node) static noexcept {
+				return basic_json_slice{ node };
+			};
 			return static_cast<array_type&>(*this) | std::views::transform(node_to_slice);
 		}
 
-		using const_slice_type::as_object;
+		using base_type::as_object;
 
 		constexpr auto as_object()
 		{
+			constexpr auto pair_node_to_slice = [](map_node_type const& pair) static noexcept {
+				auto& [key, value]{ pair };
+				return std::pair<key_string_type const&, basic_json_slice>{ key, value };
+			};
 			return static_cast<object_type&>(*this) | std::views::transform(pair_node_to_slice);
-		}
-	};
-
-	template <typename Node, typename String,
-	    typename Array,
-	    typename Object,
-	    bool HasInteger, bool HasUInteger>
-	class basic_const_json_slice
-	{
-	public:
-		static inline constexpr bool has_integer = HasInteger;
-		static inline constexpr bool has_uinteger = HasUInteger;
-
-		using node_type = Node;
-		using object_type = Object;
-		using value_type = Node;
-		using array_type = Array;
-		using string_type = String;
-
-		using const_slice_type = basic_const_json_slice;
-		using slice_type = basic_json_slice<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
-		using json_type = basic_json<node_type, string_type, array_type, object_type, has_integer, has_uinteger>;
-
-		using number_type = node_type::number_type;
-		using integer_type = node_type::integer_type;
-		using uinteger_type = node_type::uinteger_type;
-
-		using char_type = string_type::value_type;
-		using map_node_type = object_type::value_type;
-		using allocator_type = node_type::allocator_type;
-		using key_string_type = object_type::key_type;
-		using key_char_type = key_string_type::value_type;
-
-	private:
-		using traits_t = std::allocator_traits<allocator_type>;
-		using kind_t = node_type::kind_t;
-		using stor_t = node_type::stor_t;
-
-		friend json_type;
-		friend slice_type;
-
-		node_type* node_{};
-
-		constexpr kind_t kind() const noexcept
-		{
-			assert(node_);
-
-			return node_->kind_;
-		}
-
-		constexpr stor_t const& stor() const noexcept
-		{
-			return node_->stor_;
-		}
-
-	public:
-		[[nodiscard]] constexpr bool empty() const noexcept
-		{
-			return kind() == kind_t::empty;
-		}
-
-		[[nodiscard]] constexpr bool string() const noexcept
-		{
-			return kind() == kind_t::string;
-		}
-
-		[[nodiscard]] constexpr bool null() const noexcept
-		{
-			return kind() == kind_t::null;
-		}
-
-		[[nodiscard]] constexpr bool boolean() const noexcept
-		{
-			auto k = kind();
-
-			return k == kind_t::true_value || k == kind_t::false_value;
-		}
-
-		[[nodiscard]] constexpr bool number() const noexcept
-		{
-			auto k = kind();
-
-			bool is_integer{};
-			bool is_uinteger{};
-
-			if constexpr (HasInteger)
-			{
-				is_integer = k == kind_t::integer;
-			}
-
-			if constexpr (HasUInteger)
-			{
-				is_uinteger = k == kind_t::uinteger;
-			}
-
-			return k == kind_t::number || is_integer || is_uinteger;
-		}
-
-		[[nodiscard]] constexpr bool object() const noexcept
-		{
-			return kind() == kind_t::object;
-		}
-
-		[[nodiscard]] constexpr bool array() const noexcept
-		{
-			return kind() == kind_t::array;
-		}
-
-		[[nodiscard]] constexpr bool integer() const noexcept
-		    requires HasInteger
-		{
-			return kind() == kind_t::integer;
-		}
-
-		[[nodiscard]] constexpr bool uinteger() const noexcept
-		    requires HasUInteger
-		{
-			return kind() == kind_t::uinteger;
-		}
-
-		constexpr void swap(basic_const_json_slice& rhs) noexcept
-		{
-			auto temp = node_;
-			node_ = rhs.node_;
-			rhs.node_ = temp;
-		}
-
-		friend constexpr void swap(basic_const_json_slice& lhs, basic_const_json_slice& rhs) noexcept
-		{
-			lhs.swap(rhs);
-		}
-
-		// similar to iterators, default construction is allowed, but except for operator=,
-		// operations on default-constructed slice cause undefined behavior.
-		constexpr basic_const_json_slice() noexcept = default;
-
-		constexpr basic_const_json_slice(basic_const_json_slice&& rhs) noexcept = default;
-
-		constexpr basic_const_json_slice(basic_const_json_slice const& rhs) noexcept = default;
-
-		constexpr basic_const_json_slice(json_type const& j) noexcept
-		    : node_(const_cast<node_type*>(std::addressof(j.node_)))
-		{
-		}
-
-		constexpr basic_const_json_slice(node_type const& n) noexcept
-		    : node_(const_cast<node_type*>(std::addressof(n)))
-		{
-		}
-
-		constexpr basic_const_json_slice(slice_type const& s) noexcept
-		    : node_(s.node_)
-		{
-		}
-
-		constexpr basic_const_json_slice& operator=(basic_const_json_slice const& rhs) noexcept = default;
-
-		constexpr basic_const_json_slice& operator=(basic_const_json_slice&& rhs) noexcept = default;
-
-		constexpr explicit operator bool() const
-		{
-			if (!boolean())
-				throw std::runtime_error("json error: value not a boolean.");
-
-			auto k = kind();
-
-			return k == kind_t::true_value ? 1 : 0;
-		}
-
-		constexpr explicit operator number_type() const
-		{
-			auto k = kind();
-			auto s = stor();
-
-			if (k == kind_t::number)
-				return s.num_;
-			else if (k == kind_t::integer)
-				return s.int_;
-			else if (k == kind_t::uinteger)
-				return s.uint_;
-
-			throw std::runtime_error("json error: value isn't a number.");
-		}
-
-		constexpr explicit operator nulljson_t() const
-		{
-			if (!null())
-				throw std::runtime_error("json error: value isn't a null.");
-
-			return nulljson;
-		}
-
-		constexpr explicit operator string_type const&() const&
-		{
-			if (!string())
-				throw std::runtime_error("json error: value isn't a string.");
-
-			return *static_cast<string_type const*>(stor().str_);
-		}
-
-		constexpr explicit operator array_type const&() const&
-		{
-			if (!array())
-				throw std::runtime_error("json error: value isn't an array.");
-
-			return *static_cast<array_type const*>(stor().arr_);
-		}
-
-		constexpr explicit operator object_type const&() const&
-		{
-			if (!object())
-				throw std::runtime_error("json error: value isn't an object.");
-
-			return *static_cast<object_type const*>(stor().obj_);
-		}
-
-		constexpr explicit operator integer_type() const
-		    requires HasInteger
-		{
-			if (!integer())
-				throw std::runtime_error("json error: value isn't an integer.");
-
-			return stor().int_;
-		}
-
-		constexpr explicit operator uinteger_type() const
-		    requires HasUInteger
-		{
-			if (!uinteger())
-				throw std::runtime_error("json error: value isn't an unsigned integer.");
-
-			return stor().uint_;
-		}
-
-		constexpr basic_const_json_slice operator[](key_string_type const& k) const
-		{
-			if (!object())
-				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
-
-			auto& o = *static_cast<object_type*>(stor().obj_);
-			auto i = o.find(k);
-
-			if (i == o.end())
-				throw std::runtime_error("key does not exist.");
-
-			auto& [_, v] = *i;
-
-			return v;
-		}
-
-		template <typename KeyStrLike>
-		    requires std::convertible_to<KeyStrLike, key_string_type> // wrong, need check transparent comparable
-		    && (std::is_convertible_v<KeyStrLike const&, key_char_type const*> == false)
-		constexpr basic_const_json_slice operator[](KeyStrLike const& k) const
-		{
-			if (!object())
-				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
-
-			auto& o = *static_cast<object_type*>(stor().obj_);
-			auto i = o.find(k);
-
-			if (i == o.end())
-				throw std::runtime_error("key does not exist.");
-
-			auto& [_, v] = *i;
-
-			return v;
-		}
-
-		constexpr basic_const_json_slice operator[](key_char_type const* k) const
-		{
-			if (!object())
-				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
-
-			auto& o = *static_cast<object_type*>(stor().obj_);
-			auto i = o.find(k);
-
-			if (i == o.end())
-				throw std::runtime_error("key does not exist.");
-
-			auto& [_, v] = *i;
-
-			return v;
-		}
-
-		constexpr basic_const_json_slice operator[](array_type::size_type pos) const
-		{
-			if (!array())
-				throw std::runtime_error("json error: value isn't an array but is accessed using operator[].");
-
-			auto& a = *static_cast<array_type*>(stor().arr_);
-
-			return a[pos];
-		}
-
-	private:
-		static constexpr basic_const_json_slice node_to_slice(node_type const& node) noexcept
-		{
-			return node;
-		}
-
-		static constexpr std::pair<key_string_type const&, basic_const_json_slice> pair_node_to_slice(map_node_type const& pair) noexcept
-		{
-			auto& [key, value]{ pair };
-			return { key, value };
-		}
-
-	public:
-		constexpr auto as_array() const
-		{
-			return static_cast<array_type const&>(*this) | std::views::transform(node_to_slice);
-		}
-
-		constexpr auto as_object() const
-		{
-			return static_cast<object_type const&>(*this) | std::views::transform(pair_node_to_slice);
 		}
 	};
 
@@ -859,6 +934,13 @@ namespace bizwen
 		using traits_t = std::allocator_traits<allocator_type>;
 		using kind_t = node_type::kind_t;
 		using stor_t = node_type::stor_t;
+
+		using string_ator = std::allocator_traits<allocator_type>::template rebind_alloc<String>;
+		using string_ator_traits = std::allocator_traits<string_ator>;
+		using array_ator = std::allocator_traits<allocator_type>::template rebind_alloc<Array>;
+		using array_ator_traits = std::allocator_traits<array_ator>;
+		using object_ator = std::allocator_traits<allocator_type>::template rebind_alloc<Object>;
+		using object_ator_traits = std::allocator_traits<object_ator>;
 
 		friend const_slice_type;
 		friend slice_type;
@@ -899,13 +981,16 @@ namespace bizwen
 		template <typename T>
 		static constexpr T* alloc_from_node(node_type& node)
 		{
-			return typename traits_t::template rebind_alloc<T>(node).allocate(1);
+			return std::to_address(typename traits_t::template rebind_alloc<T>(node).allocate(1));
 		}
 
 		template <typename T>
 		static constexpr void dealloc_from_node(node_type& node, T* p) noexcept
 		{
-			return typename traits_t::template rebind_alloc<T>(node).deallocate(p, 1);
+			using ator_t = traits_t::template rebind_alloc<T>;
+			using ator_ptr = std::allocator_traits<ator_t>::pointer;
+			using ator_ptr_traits = std::pointer_traits<ator_ptr>;
+			return ator_t(node).deallocate(ator_ptr_traits::pointer_to(*p), 1);
 		}
 
 		static constexpr void destroy_node(node_type& node) noexcept
@@ -1130,7 +1215,7 @@ namespace bizwen
 			return *this;
 		}
 
-		constexpr basic_json& operator=(basic_json&& rhs)
+		constexpr basic_json& operator=(basic_json&& rhs) noexcept
 		{
 			rhs.swap(*this);
 
@@ -1172,7 +1257,10 @@ namespace bizwen
 		constexpr explicit basic_json(string_type v)
 		{
 			alloc_guard_<string_type> guard(node_);
-			stor().str_ = new (guard.get()) string_type(std::move(v));
+			auto ator = string_ator(node_);
+			auto rawptr = guard.get();
+			string_ator_traits::construct(ator, rawptr, std::move(v));
+			stor().str_ = rawptr;
 			guard.release();
 			kind(kind_t::string);
 		}
@@ -1180,7 +1268,10 @@ namespace bizwen
 		constexpr basic_json(char_type const* begin, char_type const* end)
 		{
 			alloc_guard_<string_type> guard(node_);
-			stor().str_ = new (guard.get()) string_type(begin, end);
+			auto ator = string_ator(node_);
+			auto rawptr = guard.get();
+			string_ator_traits::construct(ator, rawptr, begin, end);
+			stor().str_ = rawptr;
 			guard.release();
 			kind(kind_t::string);
 		}
@@ -1188,7 +1279,10 @@ namespace bizwen
 		constexpr basic_json(char_type const* str, string_type::size_type count)
 		{
 			alloc_guard_<string_type> guard(node_);
-			stor().str_ = new (guard.get()) string_type(str, count);
+			auto ator = string_ator(node_);
+			auto rawptr = guard.get();
+			string_ator_traits::construct(ator, rawptr, str, count);
+			stor().str_ = rawptr;
 			guard.release();
 			kind(kind_t::string);
 		}
@@ -1196,7 +1290,10 @@ namespace bizwen
 		constexpr explicit basic_json(char_type const* str)
 		{
 			alloc_guard_<string_type> guard(node_);
-			stor().str_ = new (guard.get()) string_type(str);
+			auto ator = string_ator(node_);
+			auto rawptr = guard.get();
+			string_ator_traits::construct(ator, rawptr, str);
+			stor().str_ = rawptr;
 			guard.release();
 			kind(kind_t::string);
 		}
@@ -1207,7 +1304,10 @@ namespace bizwen
 		constexpr basic_json(StrLike const& str)
 		{
 			alloc_guard_<string_type> guard(node_);
-			stor().str_ = new (guard.get()) string_type(str);
+			auto ator = string_ator(node_);
+			auto rawptr = guard.get();
+			string_ator_traits::construct(ator, rawptr, str);
+			stor().str_ = rawptr;
 			guard.release();
 			kind(kind_t::string);
 		}
@@ -1216,7 +1316,10 @@ namespace bizwen
 		{
 			rollbacker_array_all_ rollbacker(arr);
 			alloc_guard_<array_type> guard(node_);
-			stor().arr_ = new (guard.get()) array_type(std::move(arr));
+			auto ator = array_ator(node_);
+			auto rawptr = guard.get();
+			array_ator_traits::construct(ator, rawptr, std::move(arr));
+			stor().arr_ = rawptr;
 			guard.release();
 			rollbacker.release();
 			kind(kind_t::array);
@@ -1226,7 +1329,10 @@ namespace bizwen
 		{
 			rollbacker_map_all_ rollbacker(obj);
 			alloc_guard_<object_type> guard(node_);
-			stor().obj_ = new (guard.get()) object_type(std::move(obj));
+			auto ator = object_ator(node_);
+			auto rawptr = guard.get();
+			object_ator_traits::construct(ator, rawptr, std::move(obj));
+			stor().obj_ = rawptr;
 			guard.release();
 			rollbacker.release();
 			kind(kind_t::object);
@@ -1260,8 +1366,9 @@ namespace bizwen
 			case kind_t::string: {
 				auto const& rstr = *static_cast<string_type const*>(rs.str_);
 				alloc_guard_<string_type> mem(lhs);
+				auto ator = string_ator(lhs);
 				auto lptr = mem.get();
-				lptr = new (lptr) string_type(rstr);
+				string_ator_traits::construct(ator, lptr, rstr);
 				mem.release();
 				s.str_ = lptr;
 				break;
@@ -1271,7 +1378,9 @@ namespace bizwen
 				{
 					auto const& rarr = *static_cast<array_type const*>(rs.arr_);
 					alloc_guard_<array_type> guard(lhs);
-					auto lptr = new (guard.get()) array_type(rarr);
+					auto ator = array_ator(lhs);
+					auto lptr = guard.get();
+					array_ator_traits::construct(ator, lptr, rarr);
 					array_type& larr{ *lptr };
 					auto sentry = larr.begin();
 					rollbacker_array_part_ rollbacker(sentry, larr);
@@ -1290,7 +1399,9 @@ namespace bizwen
 				{
 					auto const& rarr = *static_cast<array_type const*>(rs.arr_);
 					alloc_guard_<array_type> guard(lhs);
-					auto lptr = new (guard.get()) array_type();
+					auto ator = array_ator(lhs);
+					auto lptr = guard.get();
+					array_ator_traits::construct(ator, lptr);
 					array_type& larr{ *lptr };
 					larr.reserve(rarr.size());
 					rollbacker_array_all_ rollbacker(larr);
@@ -1312,7 +1423,9 @@ namespace bizwen
 			case kind_t::object: {
 				auto const& robj = *static_cast<object_type const*>(rs.obj_);
 				alloc_guard_<object_type> guard(lhs);
-				auto lptr = new (guard.get()) object_type();
+				auto ator = object_ator(lhs);
+				auto lptr = guard.get();
+				object_ator_traits::construct(ator, lptr);
 				object_type& lobj{ *lptr };
 				rollbacker_map_all_ rollbacker(lobj);
 
@@ -1453,7 +1566,6 @@ namespace bizwen
 		// deduction guide for array{...}
 		template <typename... Ts>
 		array(Ts&&...) -> array<sizeof...(Ts)>;
-
 	};
 
 	enum class json_option : unsigned int
