@@ -297,7 +297,33 @@ namespace std {
 }
 ```
 
-1. For the purpose of constraints of functions, the map type `Object` is considered transparently comparable if and only if
+### General
+
+1. A `basic_json_node` object is a JSON node. A valid node object is always in one of the following states:
+    empty, null, true, false, floating-point, signed integral, unsigned integral, string, array, and object.
+
+2. Some operations of `basic_json` and `basic_json_slice` dynamically allocate memory.
+    This happens if and only if the `basic_json_node` held by `basic_json` or referenced by `basic_json_slice` is set to
+    the string, array, or object state. In such a case, let
+    - `A` be the `allocator_type` of the node type,
+    - `a` be the allocator object of type `A` stored in the node,
+    - `X` be the type for the state, which is `String` for the string state, `Array` for the array state, or `Object` for the object state.
+    - `AX` be `allocator_traits<A>::template rebind_alloc<X>`,
+    - `ax` be an lvalue of type `AX` that denotes an `AX` allocator object constructed from `a`.
+
+    Such an aforementioned operation allocates the dynamic storage with `allocator_traits<AX>::allocate(ax, 1)`,
+        and then constructs the `X` object using `allocator_traits<AX>::construct(ax, p, args...)`.
+        If an exception is thrown when setting the state, the value of the node is unchanged.
+
+3. Likewise, the assignment operators and the destructor of `basic_json` destroy the object in the dynamic storage and then deallocate the storage when needed.
+    Let
+    - `x` be the `X` object to be destroyed,
+    - `pp` be `pointer_traits<allocator_traits<AX>::pointer>::pointer_to(x)`,
+
+    `x` is destroyed using `allocator_traits<AX>::destroy(ax, addressof(x))`,
+    and then the dynamic storage is deallocated with `allocator_traits<AX>::deallocate(pp, 1)`.
+
+4. For the purpose of constraints of functions, the map type `Object` is considered transparently comparable if and only if
     - *qualified-id*s `Object::key_compare` and `Object::key_compare::is_transparent` are all valid and denote types, or
     - *qualified-id*s `Object::key_equal`, `Object::key_equal::is_transparent`, `Object::hasher`, and `Object::hasher::is_transparent`
         are all valid and denote types.
@@ -327,10 +353,10 @@ namespace std {
 2. *Remarks*: Special member functions other than the default constructor are defaulted and eligible.
     If `Allocator` is a trivially copyable class, `basic_json_node` is trivially copyable too.
 
-3. A `basic_json_node` can be in one of the following states:
-    empty, null, true, false, floating-point, signed integer, unsigned integer, string, array, and object.
-    No JSON value is stored if the node is in the empty, null, true, or false state.
-    Dynamic storage is acquired if and only if the node is in the string, array, or object state.
+3. If the node is in the floating-point, signed integral, or unsigned integral state,
+    an object of type `number_type`, `integer_type`, or `uinteger_type` stored within the node.
+    If the node is in the string, array, or object state, an object of the type corresponding to the state is dynamically allocated, and a pointer to it is stored with the node.
+    [*Note*: A single node type can refer to string, dynamic array, or map of different types.  -- *end note*]
 
 ```cpp
 constexpr basic_json_node() noexcept;
@@ -439,66 +465,80 @@ constexpr explicit basic_json(string_type v);
 
 4. *Effects*: Sets <i>`node_`</i> to the string state and stores a string constructed from `std::move(v)`.
 
+5. *Throws*: The exception thrown on allocation failure, or the exception thrown in the failed construction of the `String`.
+
 ```cpp
 constexpr basic_json(const char_type* first, const char_type* last);
 ```
 
-5. *Preconditions*: [`first`, `last`) is a valid range.
+6. *Preconditions*: [`first`, `last`) is a valid range.
 
-6. *Effects*: Sets <i>`node_`</i> to the string state and stores a string containing characters from `first` until `last`.
+7. *Effects*: Sets <i>`node_`</i> to the string state and stores a string containing characters in [`first`, `last`).
+
+8. *Throws*: The exception thrown on allocation failure, or the exception thrown in the failed construction of the `String`.
 
 ```cpp
 constexpr basic_json(const char_type* str, string_type::size_type count);
 ```
 
-7. *Preconditions*: [`str`, `str + count`) is a valid range.
+9. *Preconditions*: [`str`, `str + count`) is a valid range.
 
-8. *Effects*: Sets <i>`node_`</i> to the string state and stores a string containing characters from `str` until `str + count`.
+10. *Effects*: Sets <i>`node_`</i> to the string state and stores a string containing characters in [`str`, `str + count`).
+
+11. *Throws*: The exception thrown on allocation failure, or the exception thrown in the failed construction of the `String`.
 
 ```cpp
 constexpr explicit basic_json(const char_type* str);
 ```
 
-9. *Preconditions*: `str` points to a null-terminated `char_type` sequence.
+12. *Preconditions*: `str` points to a null-terminated `char_type` sequence.
 
-10. *Effects*: Sets <i>`node_`</i> to the string state and stores a string containing characters from `str` until `str + count`,
+13. *Effects*: Sets <i>`node_`</i> to the string state and stores a string containing characters in [`str`, `str + count`),
     where `count` is the number of characters in the null-terminated sequence.
+
+14. *Throws*: The exception thrown on allocation failure, or the exception thrown in the failed construction of the `String`.
 
 ```cpp
 template<class StrLike>
   constexpr basic_json(const StrLike& str);
 ```
 
-11. *Constraints*:
+15. *Constraints*:
     - `constructible_from<string_type, StrLike>` is `true`, and
     - `is_convertible_v<const KeyStrLike&, const key_char_type*>` is `false`.
 
-12. *Effects*: Sets <i>`node_`</i> to the string state and stores a string constructed from `str`.
+16. *Effects*: Sets <i>`node_`</i> to the string state and stores a string constructed from `str`.
+
+17. *Throws*: The exception thrown on allocation failure, or the exception thrown in by the construction of the `String`.
 
 ```cpp
 constexpr explicit basic_json(array_type arr);
 ```
 
-13. *Effects*: Sets <i>`node_`</i> to the array state and stores a dynamic array constructed from `std::move(arr)`.
+18. *Effects*: Sets <i>`node_`</i> to the array state and stores a dynamic array constructed from `std::move(arr)`.
+
+19. *Throws*: The exception thrown on allocation failure, or the exception thrown by the construction of the `Array`.
 
 ```cpp
 constexpr explicit basic_json(object_type obj);
 ```
 
-14. *Effects*: Sets <i>`node_`</i> to the object state and stores a map constructed from `std::move(obj)`.
+20. *Effects*: Sets <i>`node_`</i> to the object state and stores a map constructed from `std::move(obj)`.
+
+21. *Throws*: The exception thrown on allocation failure, or the exception thrown by the construction of the `Object`.
 
 ```cpp
 constexpr explicit basic_json(node_type&& n) noexcept;
 ```
 
-15. *Effects*: Initializes <i>`node_`</i> with `n` and then sets `n` to the empty state.
+22. *Effects*: Initializes <i>`node_`</i> with `n` and then sets `n` to the empty state.
 
 ```cpp
 constexpr void swap(basic_json& rhs) noexcept;
 friend constexpr void swap(basic_json& lhs, basic_json& rhs) noexcept;
 ```
 
-16. *Effects*: Swaps the values of the <i>`node_`</i> member of both `basic_json` objects.
+23. *Effects*: Swaps the values of the <i>`node_`</i> member of both `basic_json` objects.
 
 #### Slicing
 
@@ -587,7 +627,7 @@ namespace std {
       constexpr basic_const_json_slice operator[](const key_string_type& k) const;
       template&lt;class KeyStrLike>
         constexpr basic_const_json_slice operator[](const KeyStrLike& k) const;
-      constexpr basic_const_json_slice operator[](const key_char_type* k) const;
+      constexpr basic_const_json_slice operator[](const key_char_type* ks) const;
 
       constexpr basic_json_slice& operator=(nulljson_t);
       template&lt;class T>
@@ -601,7 +641,7 @@ namespace std {
       constexpr basic_json_slice operator[](const key_string_type& k);
       template&lt;class KeyStrLike>
         constexpr basic_json_slice operator[](const KeyStrLike& k);
-      constexpr basic_json_slice operator[](const key_char_type* k);
+      constexpr basic_json_slice operator[](const key_char_type* ks);
 
     private:
       node_type* <i>node_</i> = nullptr;    // exposition only
@@ -676,7 +716,7 @@ constexpr basic_const_json_slice operator[](array_type::size_type pos) const;
 constexpr basic_const_json_slice operator[](const key_string_type& k) const;
 template&lt;class KeyStrLike>
   constexpr basic_const_json_slice operator[](const KeyStrLike& k) const;
-constexpr basic_const_json_slice operator[](const key_char_type* k) const;
+constexpr basic_const_json_slice operator[](const key_char_type* ks) const;
 </pre>
 
 1. Every observer function of `basic_json_slice` has the same constraints and semantics as converting the `basic_json_slice` to its `const_slice_type`
@@ -739,6 +779,7 @@ constexpr basic_json_slice& operator=(const string_type& str);
 12. *Returns*: `*this`.
 
 13. *Throws*: A `runtime_error` exception if the referenced node is not in the empty or the string state.
+    Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
 
 ```cpp
 constexpr basic_json_slice& operator=(string_type&& str);
@@ -753,6 +794,7 @@ constexpr basic_json_slice& operator=(string_type&& str);
 16. *Returns*: `*this`.
 
 17. *Throws*: A `runtime_error` exception if the referenced node is not in the empty or the string state.
+    Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
 
 ```cpp
 constexpr basic_json_slice& operator=(const char_type* str);
@@ -768,6 +810,7 @@ constexpr basic_json_slice& operator=(const char_type* str);
 20. *Returns*: `*this`.
 
 21. *Throws*: A `runtime_error` exception if the referenced node is not in the empty or the string state.
+    Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
 
 ```cpp
 template<class StrLike>
@@ -787,6 +830,7 @@ template<class StrLike>
 25. *Returns*: `*this`.
 
 26. *Throws*: A `runtime_error` exception if the referenced node is not in the empty or the string state.
+    Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
 
 ```cpp
 constexpr basic_json_slice operator[](array_type::size_type pos);
@@ -802,6 +846,7 @@ constexpr basic_json_slice operator[](array_type::size_type pos);
 constexpr basic_json_slice operator[](const key_string_type& k);
 template<class KeyStrLike>
   constexpr basic_json_slice operator[](const KeyStrLike& k);
+constexpr basic_json_slice operator[](const key_char_type* ks);
 ```
 
 30. *Constraints*: For the template overload:
@@ -809,26 +854,21 @@ template<class KeyStrLike>
     - `is_convertible_v<const KeyStrLike&, const key_char_type*>` is `false`.
 
 31. *Preconditions*: `*this` is valid.
+    For the overload taking a `const key_char_type*`, if the referenced node is in the object state, `ks` points to a null-terminated `key_char_type` sequence.
 
-32. *Effects*:
-    - If the referenced node is not in the object state, throws a `runtime_error` exception.
-    - Otherwise, if a node with key `k` is found in the stored map of the referenced node, returns a `basic_json_slice` referencing the found node.
-    - Otherwise, inserts an element with key `k` and a value-initialized mapped value into the stoed map,
-        and then returns a `basic_json_slice` referencing the inserted node.
-
-```cpp
-constexpr basic_json_slice operator[](const key_char_type* k);
-```
-
-33. *Preconditions*: `*this` is valid. If the referenced node is in the object state, `k` points to a null-terminated `key_char_type` sequence.
-
-34. *Effects*:
-    - If the referenced node is not in the object state, throws a `runtime_error` exception.
-    - Otherwise, Let `ks` be a `string_type` value containing characters from `k` until `k + count`,
+32. For the overload taking a `const key_char_type*`, let `k` be a `key_string_type` value containing characters in [`ks`, `ks + count`),
         where `count` is the number of characters in the null-terminated sequence.
-        If a node with key `ks` is found in the stored map of the referenced node, returns a `basic_json_slice` referencing the found node.
-    - Otherwise, inserts an element with key `ks` and a value-initialized mapped value into the stoed map,
-        and then returns a `basic_json_slice` referencing the inserted node.
+
+32. *Effects*: If the referenced node is in the object state and no element with key `k` is found in its stored map,
+        inserts an element with key `k` and a value-initialized node into the stored map.
+
+34. *Returns*:
+    - If the referenced node is in the object state and an element with key `k` is found in its stored map,
+        a `basic_json_slice` referencing the mapped value of that element.
+    - Otherwise, if a new element `e` is inserted, a `basic_json_slice`, a `basic_json_slice` the mapped value of the inserted element.
+
+35. *Throws*: A `runtime_error` exception the referenced node is not in the object state.
+    Otherwise, the exception thrown when looking up the key, or by the allocation or construction of the inserted map element.
 
 ### Class template `basic_const_json_slice`
 
@@ -892,7 +932,7 @@ namespace std {
       constexpr basic_const_json_slice operator[](const key_string_type& k) const;
       template&lt;class KeyStrLike>
         constexpr basic_const_json_slice operator[](const KeyStrLike& k) const;
-      constexpr basic_const_json_slice operator[](const key_char_type* k) const;
+      constexpr basic_const_json_slice operator[](const key_char_type* ks) const;
 
     private:
       const node_type* <i>node_</i> = nullptr;  // exposition only
@@ -1111,6 +1151,7 @@ constexpr basic_const_json_slice operator[](array_type::size_type pos) const;
 constexpr basic_const_json_slice operator[](const key_string_type& k) const;
 template<class KeyStrLike>
   constexpr basic_const_json_slice operator[](const KeyStrLike& k) const;
+constexpr basic_const_json_slice operator[](const key_char_type* ks) const;
 ```
 
 50. *Constraints*: For the template overload:
@@ -1118,21 +1159,16 @@ template<class KeyStrLike>
     - `is_convertible_v<const KeyStrLike&, const key_char_type*>` is `false`.
 
 51. *Preconditions*: `*this` is valid.
+    For the overload taking a `const key_char_type*`, if the referenced node is in the object state, `ks` points to a null-terminated `key_char_type` sequence.
 
-52. *Returns*: If the referenced node is in the object state and a node with key `k` is found in the stored map, a `basic_const_json_slice` referencing the found node.
+52. For the overload taking a `const key_char_type*`, let `k` be a `key_string_type` value containing characters in [`ks`, `ks + count`),
+        where `count` is the number of characters in the null-terminated sequence.
 
-53. *Throws*: A `runtime_error` exception if the referenced node is not in the object state or no node with key `k` is found.
+53. *Returns*: If the referenced node is in the object state and an element with key `k` is found in the stored map,
+    a `basic_const_json_slice` referencing the mapped value of that element.
 
-```cpp
-constexpr basic_const_json_slice operator[](const key_char_type* k) const;
-```
-
-54. *Preconditions*: `*this` is valid. If the referenced node is in the object state, `k` points to a null-terminated `key_char_type` sequence.
-
-55. *Returns*: Let `ks` be a `string_type` value containing characters from `k` until `k + count`, where `count` is the number of characters in the null-terminated sequence.
-    If the referenced node is in the object state and a node with key `ks` is found in the stored map, a `basic_const_json_slice` referencing the found node.
-
-56. *Throws*: A `runtime_error` exception if the referenced node is not in the object state or no node with key `ks` is found.
+54. *Throws*: A `runtime_error` exception if the referenced node is not in the object state or no element with key `k` is found,
+    or the exception thrown when looking up the key.
 
 ## Feature-test macro
 
