@@ -104,7 +104,7 @@ Trivial copyability of `basic_json_node` depends on `Allocator`. If `Allocator` 
 `basic_json` is a `semiregular` type that represents ownership of a JSON structure. It can be implemented as storing a `basic_json_node` as its only non-static data member, which makes `basic_json` and `basic_json_node` have the same size.
 Its destructor is responsible for destructing all nodes and deallocate all dynamic storage held by the object. The copy constructor and copy assignment operator copy the JSON. The swap operation is provided as both a hidden friend function and a non-static member function.
 
-The reason why the allocator is a template parameter of `basic_json_node` rather than `basic_json` is that `basic_json` must have the same size as `basic_json_node`, so `char` is usually used to instantiate the allocator (`void type` can be used after LWG issue [[3917]] is resolved),
+The reason why the allocator is a template parameter of `basic_json_node` rather than `basic_json` is that `basic_json` must have the same size as `basic_json_node`, so `char` is usually used to instantiate the allocator (`void` type can be used after LWG issue [[3917]] is resolved),
 and then rebind is used to allocate storage. Once a specialization of `basic_json_node` is available, `basic_json` can be instantiated. `basic_json` has six template parameters: `Node`, `String`, `Array`, `Object`, `HasInteger`, `HasUInteger`.
 
 `Node` must be a specialization of `basic_json_node`, and since `basic_json_node` provides type aliases to obtain the template arguments, `basic_json` can extract these type aliases, rewrite the specialization of `basic_json_node`, and compare it with `Node` to ensure this.
@@ -261,250 +261,922 @@ int main()
 }
 ```
 
-# Appendix
+# Proposal
+
+## Wording
+
+### Header `<json>` synopsis
 
 ```cpp
-struct nulljson_t
-{
-	explicit constexpr nulljson_t() noexcept = default;
-};
+namespace std {
+  struct nulljson_t {
+    explicit nulljson_t() = default;
+  };
 
-inline constexpr nulljson_t nulljson;
+  inline constexpr nulljson_t nulljson;
 
-template <typename Number = double,
-	typename Integer = long long, typename UInteger = unsigned long long,
-	typename Allocator = std::allocator<char>>
-class basic_json_node
-{
-public:
-	using number_type = Number;
-	using integer_type = Integer;
-	using uinteger_type = UInteger;
-	using allocator_type = Allocator;
+  template<class Number = double, class Integer = long long, class UInteger = unsigned long long,
+           class Allocator = allocator<char>>
+    class basic_json_node;
 
-	constexpr basic_json_node() noexcept = default;
-	constexpr basic_json_node(basic_json_node const&) = default;
-	constexpr basic_json_node(basic_json_node&& rhs) noexcept = default;
-	constexpr basic_json_node& operator=(basic_json_node&& rhs) noexcept = default;
-}
+  template<class Node = basic_json_node<>, class String = string, class Array = vector<Node>,
+           class Object = map<String, Node>, bool HasInteger = true, bool HasUInteger = true>
+    class basic_json;
 
-template <typename Node = basic_json_node<>, typename String = std::string,
-	typename Array = std::vector<Node>,
-	typename Object = std::map<String, Node>,
-	bool HasInteger = true, bool HasUInteger = true>
-class basic_json
-{
-public:
-	static inline constexpr bool has_integer = HasInteger;
-	static inline constexpr bool has_uinteger = HasUInteger;
+  template<class Node = basic_json_node<>, class String = string, class Array = vector<Node>,
+           class Object = map<String, Node>, bool HasInteger = true, bool HasUInteger = true>
+    class basic_json_slice;
 
-	using node_type = Node;
-	using object_type = Object;
-	using value_type = Node;
-	using array_type = Array;
-	using string_type = String;
+  template<class Node = basic_json_node<>, class String = string, class Array = vector<Node>,
+           class Object = map<String, Node>, bool HasInteger = true, bool HasUInteger = true>
+    class basic_const_json_slice;
 
-	using slice_type = /* ... */;
-	using const_slice_type = /* ... */;
-
-	using number_type = node_type::number_type;
-	using integer_type = node_type::integer_type;
-	using uinteger_type = node_type::uinteger_type;
-
-	using char_type = string_type::value_type;
-	using map_node_type = object_type::value_type;
-	using allocator_type = node_type::allocator_type;
-	using key_string_type = object_type::key_type;
-	using key_char_type = key_string_type::value_type;
-
-	constexpr void swap(basic_json& rhs) noexcept;
-	friend constexpr void swap(basic_json& lhs, basic_json& rhs) noexcept;
-	constexpr basic_json() noexcept = default;
-	constexpr basic_json(basic_json&& rhs) noexcept;
-	constexpr basic_json(basic_json const& rhs);
-	constexpr basic_json& operator=(basic_json&& rhs);
-	constexpr basic_json& operator=(basic_json const& rhs);
-	constexpr basic_json(decltype(nullptr)) noexcept = delete;
-	template <typename T>
-		requires std::is_arithmetic_v<T>
-	constexpr basic_json(T n) noexcept
-	constexpr explicit basic_json(string_type v);
-	constexpr basic_json(char_t const* begin, char_t const* end);
-	constexpr basic_json(char_t const* str, string_type::size_type count);
-	constexpr explicit basic_json(char_t const* str);
-	template <typename StrLike>
-		requires std::constructible_from<string_type, StrLike>
-		&& (std::is_convertible_v<StrLike const&, char_type const*> == false)
-	constexpr basic_json(StrLike const& str);
-	constexpr explicit basic_json(array_type arr);
-	constexpr explicit basic_json(object_type obj);
-	constexpr explicit basic_json(node_type&& n) noexcept;
-	[[nodiscard("discard nodes will cause leaks")]] constexpr operator node_type() && noexcept;
-	constexpr ~basic_json() noexcept;
-	constexpr slice_type slice();
-	constexpr const_slice_type slice() const;
-
-	// Helper Classes
-	template<typename... Ts>
-	struct array{ /*implement defined */ };
-	template <std::size_t N>
-	struct object{ /*implement defined */ };
-	template <typename... Ts>
-	object(Ts&&...) -> object</* implement defined */>;
-}
-
-template <typename Node = basic_json_node<>, typename String = std::string,
-	typename Array = std::vector<Node>,
-	typename Object = std::map<String, Node>,
-	bool HasInteger = true, bool HasUInteger = true>
-class basic_json_slice
-{
-public:
-	static inline constexpr bool has_integer = HasInteger;
-	static inline constexpr bool has_uinteger = HasUInteger;
-
-	using node_type = Node;
-	using object_type = Object;
-	using value_type = Node;
-	using array_type = Array;
-	using string_type = String;
-
-	using slice_type = /* ... */;
-	using const_slice_type = /* ... */;
-	using json_type = /* ... */;
-	
-	using number_type = node_type::number_type;
-	using integer_type = node_type::integer_type;
-	using uinteger_type = node_type::uinteger_type;
-
-	using char_type = string_type::value_type;
-	using map_node_type = object_type::value_type;
-	using allocator_type = node_type::allocator_type;
-	using key_string_type = object_type::key_type;
-	using key_char_type = key_string_type::value_type;
-
-	[[nodiscard]] constexpr bool empty() const noexcept;
-	[[nodiscard]] constexpr bool string() const noexcept;
-	[[nodiscard]] constexpr bool null() const noexcept;
-	[[nodiscard]] constexpr bool boolean() const noexcept;
-	[[nodiscard]] constexpr bool number() const noexcept;
-	[[nodiscard]] constexpr bool object() const noexcept;
-	[[nodiscard]] constexpr bool array() const noexcept;
-	[[nodiscard]] constexpr bool integer() const noexcept
-		requires HasInteger;
-	[[nodiscard]] constexpr bool uinteger() const noexcept
-		requires HasUInteger;
-	constexpr void swap(basic_json_slice& rhs) noexcept;
-	friend constexpr void swap(basic_json_slice& lhs, basic_json_slice& rhs) noexcept;
-	constexpr basic_json_slice() noexcept = default;
-	constexpr basic_json_slice(basic_json_slice&& rhs) noexcept = default;
-	constexpr basic_json_slice(basic_json_slice const& rhs) noexcept = default;
-	constexpr basic_json_slice(json_t& j) noexcept;
-	constexpr basic_json_slice(node_type& n) noexcept;
-	constexpr basic_json_slice& operator=(basic_json_slice const& rhs) noexcept = default;
-	constexpr basic_json_slice& operator=(basic_json_slice&& rhs) noexcept = default;
-	constexpr explicit operator bool() const;
-	constexpr explicit operator number_t() const;
-	constexpr explicit operator nulljson_t() const;
-	constexpr explicit operator string_type&() const&;
-	constexpr explicit operator array_type&() const&;
-	constexpr explicit operator object_type&() const&;
-	constexpr explicit operator integer_t() const
-		requires HasInteger;
-	constexpr explicit operator uinteger_t() const
-		requires HasUInteger;
-	constexpr basic_json_slice operator[](key_string_t const& k);
-	template <typename KeyStrLike>
-		requires transparent_comparable<KeyStrLike, key_string_t>
-		&& (std::is_convertible_v<KeyStrLike const&, key_char_type const*> == false)
-	constexpr basic_json_slice operator[](KeyStrLike const& k);
-	constexpr basic_json_slice operator[](key_char_t* k);
-	constexpr basic_json_slice operator[](array_type::size_type pos);
-	constexpr basic_json_slice& operator=(string_type const& str);
-	constexpr basic_json_slice& operator=(string_type&& str);
-	constexpr basic_json_slice& operator=(char_t* str);
-	template <typename StrLike>
-		requires std::constructible_from<string_type, StrLike>
-		&& (std::is_convertible_v<KeyStrLike const&, key_char_type const*> == false)
-	constexpr basic_json_slice& operator=(StrLike const& str);
-	constexpr basic_json_slice& operator=(nulljson_t n);
-	template <typename T>
-		requires std::is_arithmetic_v<T>
-	constexpr basic_json_slice& operator=(T n)
-	constexpr basic_json_slice& operator=(json_t& j);
-	constexpr basic_json_slice& operator=(node_type& n);
-}
-
-template <typename Node = basic_json_node<>, typename String = std::string,
-	typename Array = std::vector<Node>,
-	typename Object = std::map<String, Node>,
-	bool HasInteger = true, bool HasUInteger = true>
-class basic_const_json_slice
-{
-public:
-	static inline constexpr bool has_integer = HasInteger;
-	static inline constexpr bool has_uinteger = HasUInteger;
-
-	using node_type = Node;
-	using object_type = Object;
-	using value_type = Node;
-	using array_type = Array;
-	using string_type = String;
-
-	using slice_type = /* ... */;
-	using const_slice_type = /* ... */;
-	using json_type = /* ... */;
-	
-	using number_type = node_type::number_type;
-	using integer_type = node_type::integer_type;
-	using uinteger_type = node_type::uinteger_type;
-
-	using char_type = string_type::value_type;
-	using map_node_type = object_type::value_type;
-	using allocator_type = node_type::allocator_type;
-	using key_string_type = object_type::key_type;
-	using key_char_type = key_string_type::value_type;
-
-	[[nodiscard]] constexpr bool empty() const noexcept;
-	[[nodiscard]] constexpr bool string() const noexcept;
-	[[nodiscard]] constexpr bool null() const noexcept;
-	[[nodiscard]] constexpr bool boolean() const noexcept;
-	[[nodiscard]] constexpr bool number() const noexcept;
-	[[nodiscard]] constexpr bool object() const noexcept;
-	[[nodiscard]] constexpr bool array() const noexcept;
-	[[nodiscard]] constexpr bool integer() const noexcept
-		requires HasInteger;
-	[[nodiscard]] constexpr bool uinteger() const noexcept
-		requires HasUInteger;
-	constexpr void swap(basic_const_json_slice& rhs) noexcept
-	friend constexpr void swap(basic_const_json_slice& lhs, basic_const_json_slice& rhs) noexcept
-	constexpr basic_const_json_slice() noexcept = default;
-	constexpr basic_const_json_slice(basic_const_json_slice&& rhs) noexcept = default;
-	constexpr basic_const_json_slice(basic_const_json_slice const& rhs) noexcept = default;
-	constexpr basic_const_json_slice(json_t const& j) noexcept;
-	constexpr basic_const_json_slice(node_type const& n) noexcept;
-	constexpr basic_const_json_slice& operator=(basic_const_json_slice const& rhs) noexcept = default;
-	constexpr basic_const_json_slice& operator=(basic_const_json_slice&& rhs) noexcept = default;
-	constexpr explicit operator bool() const;
-	constexpr explicit operator number_t() const;
-	constexpr explicit operator nulljson_t() const;
-	constexpr explicit operator const string_type&() const&;
-	constexpr explicit operator const array_type&() const&;
-	constexpr explicit operator const object_type&() const&;
-	constexpr explicit operator integer_t() const
-		requires HasInteger;
-	constexpr explicit operator uinteger_t() const
-		requires HasUInteger;
-	constexpr basic_const_json_slice operator[](key_string_t const& k) const;
-	template <typename KeyStrLike>
-		requires transparent_comparable<KeyStrLike, key_string_t>
-		&& (std::is_convertible_v<KeyStrLike const&, key_char_type const*> == false)
-	constexpr basic_const_json_slice operator[](KeyStrLike const& k) const;
-	constexpr basic_const_json_slice operator[](key_char_t* k) const;
-	constexpr basic_const_json_slice operator[](array_type::size_type pos) const;
-	constexpr basic_const_json_slice(slice_type const& s);
+  using json             = basic_json<>;
+  using json_slice       = basic_json_slice<>;
+  using const_json_slice = basic_const_json_slice<>;
 }
 ```
+
+### General
+
+1. A `basic_json_node` object is a JSON node. A valid node object is always in one of the following states:
+    empty, null, true, false, floating-point, signed integral, unsigned integral, string, array, and object.
+
+2. Some operations of `basic_json` and `basic_json_slice` dynamically allocate memory.
+    This happens if and only if the `basic_json_node` held by `basic_json` or referenced by `basic_json_slice` is set to
+    the string, array, or object state. In such a case, let
+    - `A` be the `allocator_type` of the node type,
+    - `a` be the allocator object of type `A` stored in the node,
+    - `X` be the type for the state, which is `String` for the string state, `Array` for the array state, or `Object` for the object state.
+    - `AX` be `allocator_traits<A>::template rebind_alloc<X>`,
+    - `ax` be an lvalue of type `AX` that denotes an `AX` allocator object constructed from `a`.
+
+    Such an aforementioned operation allocates the dynamic storage with `allocator_traits<AX>::allocate(ax, 1)`,
+        and then constructs the `X` object using `allocator_traits<AX>::construct(ax, p, args...)`.
+        If an exception is thrown when setting the state, the value of the node is unchanged.
+
+3. Likewise, the assignment operators and the destructor of `basic_json` destroy the object in the dynamic storage and then deallocate the storage when needed.
+    Let
+    - `x` be the `X` object to be destroyed,
+    - `pp` be `pointer_traits<allocator_traits<AX>::pointer>::pointer_to(x)`,
+
+    `x` is destroyed using `allocator_traits<AX>::destroy(ax, addressof(x))`,
+    and then the dynamic storage is deallocated with `allocator_traits<AX>::deallocate(pp, 1)`.
+
+4. For the purpose of constraints of functions, the map type `Object` is considered transparently comparable if and only if
+    - *qualified-id*s `Object::key_compare` and `Object::key_compare::is_transparent` are all valid and denote types, or
+    - *qualified-id*s `Object::key_equal`, `Object::key_equal::is_transparent`, `Object::hasher`, and `Object::hasher::is_transparent`
+        are all valid and denote types.
+
+### Class template `basic_json_node`
+
+```cpp
+namespace std {
+  template<class Number = double, class Integer = long long, class UInteger = unsigned long long,
+           class Allocator = allocator<char>>
+    class basic_json_node {
+    public:
+      using number_type    = Number;
+      using integer_type   = Integer;
+      using uinteger_type  = UInteger;
+      using allocator_type = Allocator;
+
+      constexpr basic_json_node() noexcept;
+    };
+}
+```
+
+1. *Mandates*:
+    - `floating_point<Number>`, `signed_integral<Integer>`, and `unsigned_integral<UInteger>` are all `true`.
+    - `Allocator` meets the *Cpp17Allocator* requirements, no diagnostic is required for this.
+
+2. *Remarks*: Special member functions other than the default constructor are defaulted and eligible.
+    If `Allocator` is a trivially copyable class, `basic_json_node` is trivially copyable too.
+
+3. If the node is in the floating-point, signed integral, or unsigned integral state,
+    an object of type `number_type`, `integer_type`, or `uinteger_type` stored within the node.
+    If the node is in the string, array, or object state, an object of the type corresponding to the state is dynamically allocated, and a pointer to it is stored with the node.
+    [*Note*: A single node type can refer to string, dynamic array, or map of different types.  -- *end note*]
+
+```cpp
+constexpr basic_json_node() noexcept;
+```
+
+4. *Effects*: Initializes the node to the empty state. Default-initializes the stored allocator.
+
+### Class template `basic_json`
+
+<pre highlight="c++">
+namespace std {
+  template&lt;class Node = basic_json_node&lt;>, class String = string, class Array = vector&lt;Node>,
+           class Object = map&lt;String, Node>, bool HasInteger = true, bool HasUInteger = true>
+    class basic_json {
+    public:
+      static constexpr bool has_integer  = HasInteger;
+      static constexpr bool has_uinteger = HasUInteger;
+
+      using slice_type       = basic_json_slice&lt;Node, String, Array, Object,
+                                                HasInteger, HasUInteger>;
+      using const_slice_type = basic_const_json_slice&lt;Node, String, Array, Object,
+                                                      HasInteger, HasUInteger>;
+
+      using number_type   = node_type::number_type;
+      using integer_type  = node_type::integer_type;
+      using uinteger_type = node_type::uinteger_type;
+
+      using char_type       = string_type::value_type;
+      using map_node_type   = object_type::value_type;
+      using allocator_type  = node_type::allocator_type;
+      using key_string_type = object_type::key_type;
+      using key_char_type   = key_string_type::value_type;
+
+      constexpr basic_json() noexcept = default;
+      constexpr basic_json(const basic_json& rhs);
+      constexpr basic_json(basic_json&& rhs) noexcept;
+      constexpr basic_json& operator=(const basic_json& rhs);
+      constexpr basic_json& operator=(basic_json&& rhs) noexcept;
+      constexpr ~basic_json();
+      constexpr void swap(basic_json& rhs) noexcept;
+      friend constexpr void swap(basic_json& lhs, basic_json& rhs) noexcept;
+
+      constexpr basic_json(nulljson_t) noexcept;
+      template&lt;class T>
+        constexpr basic_json(T n) noexcept;
+      constexpr explicit basic_json(string_type v);
+      constexpr basic_json(const char_type* first, const char_type* last);
+      constexpr basic_json(const char_type* str, string_type::size_type count);
+      constexpr explicit basic_json(const char_type* str);
+      template&lt;class StrLike>
+        constexpr basic_json(const StrLike& str);
+      constexpr explicit basic_json(array_type arr);
+      constexpr explicit basic_json(object_type obj);
+      constexpr explicit basic_json(node_type&& n) noexcept;
+      basic_json(nullptr_t) = delete;
+
+      constexpr operator node_type() && noexcept;
+      constexpr slice_type slice() noexcept;
+      constexpr const_slice_type slice() const noexcept;
+
+    private:
+      node_type <i>node_</i>;   // exposition only
+
+      // Helper Classes
+      template&lt;class... Ts>
+      struct <i>array</i>;      // exposition only
+
+      template&lt;size_t N>
+      struct <i>object</i>;     // exposition only
+
+      template&lt;class... Ts>
+      <i>object</i>(Ts&&...) -> <i>object</i>&lt;<i>see below</i>>;
+    };
+}
+</pre>
+
+1. *Mandates*:
+    - `Node` is a well-formed specialization of `basic_json_node`.
+    - *qualified-id* `Array::value_type` is valid and denotes the same type as `Node`.
+    - *qualified-id* `Object::mapped_type` is valid and denotes the same type as `Node`.
+
+#### Construction and swap
+
+```cpp
+constexpr basic_json(nulljson_t) noexcept;
+```
+
+1. *Effects*: Sets <i>`node_`</i> to the null state.
+
+```cpp
+template<class T>
+  constexpr basic_json(T n) noexcept;
+```
+
+2. *Constraints*: `is_arithmetic_v<T>` is `true`.
+
+3. *Effects*:
+    - If `T` is `bool`, sets <i>`node_`</i> to the true or the false state if `n` is `true` or `false`, respectively.
+    - Otherwise, if `signed_integral<T>` and `has_integer` are both `true`, sets <i>`node_`</i> to the signed integral state and stores `n`.
+    - Otherwise, if `unsigned_integral<T>` and `has_uinteger` are both `true`, sets <i>`node_`</i> to the unsigned integral state and stores `n`.
+    - Otherwise, sets <i>`node_`</i> to the floating-point state and stores `static_cast<number_type>(n)`.
+
+```cpp
+constexpr explicit basic_json(string_type v);
+```
+
+4. *Effects*: Sets <i>`node_`</i> to the string state and stores a string constructed from `std::move(v)`.
+
+5. *Throws*: The exception thrown on allocation failure, or the exception thrown in the failed construction of the `String`.
+
+```cpp
+constexpr basic_json(const char_type* first, const char_type* last);
+```
+
+6. *Preconditions*: [`first`, `last`) is a valid range.
+
+7. *Effects*: Sets <i>`node_`</i> to the string state and stores a string containing characters in [`first`, `last`).
+
+8. *Throws*: The exception thrown on allocation failure, or the exception thrown in the failed construction of the `String`.
+
+```cpp
+constexpr basic_json(const char_type* str, string_type::size_type count);
+```
+
+9. *Preconditions*: [`str`, `str + count`) is a valid range.
+
+10. *Effects*: Sets <i>`node_`</i> to the string state and stores a string containing characters in [`str`, `str + count`).
+
+11. *Throws*: The exception thrown on allocation failure, or the exception thrown in the failed construction of the `String`.
+
+```cpp
+constexpr explicit basic_json(const char_type* str);
+```
+
+12. *Preconditions*: `str` points to a null-terminated `char_type` sequence.
+
+13. *Effects*: Sets <i>`node_`</i> to the string state and stores a string containing characters in [`str`, `str + count`),
+    where `count` is the number of characters in the null-terminated sequence.
+
+14. *Throws*: The exception thrown on allocation failure, or the exception thrown in the failed construction of the `String`.
+
+```cpp
+template<class StrLike>
+  constexpr basic_json(const StrLike& str);
+```
+
+15. *Constraints*:
+    - `constructible_from<string_type, StrLike>` is `true`, and
+    - `is_convertible_v<const KeyStrLike&, const key_char_type*>` is `false`.
+
+16. *Effects*: Sets <i>`node_`</i> to the string state and stores a string constructed from `str`.
+
+17. *Throws*: The exception thrown on allocation failure, or the exception thrown in by the construction of the `String`.
+
+```cpp
+constexpr explicit basic_json(array_type arr);
+```
+
+18. *Effects*: Sets <i>`node_`</i> to the array state and stores a dynamic array constructed from `std::move(arr)`.
+
+19. *Throws*: The exception thrown on allocation failure, or the exception thrown by the construction of the `Array`.
+
+```cpp
+constexpr explicit basic_json(object_type obj);
+```
+
+20. *Effects*: Sets <i>`node_`</i> to the object state and stores a map constructed from `std::move(obj)`.
+
+21. *Throws*: The exception thrown on allocation failure, or the exception thrown by the construction of the `Object`.
+
+```cpp
+constexpr explicit basic_json(node_type&& n) noexcept;
+```
+
+22. *Effects*: Initializes <i>`node_`</i> with `n` and then sets `n` to the empty state.
+
+```cpp
+constexpr void swap(basic_json& rhs) noexcept;
+friend constexpr void swap(basic_json& lhs, basic_json& rhs) noexcept;
+```
+
+23. *Effects*: Swaps the values of the <i>`node_`</i> member of both `basic_json` objects.
+
+#### Slicing
+
+```cpp
+constexpr operator node_type() && noexcept;
+```
+
+1. *Effects*: Equivalent to <code>return exchange(<i>node_</i>, node_type{});</code>.
+
+2. *Recommended practice*: An implementation should emit a diagnostic message when the return value is discarded.<br>
+    [*Note*: Discarding the return value leaks memory if <i>`node_`</i> was originally in the string, array, or object state. -- *end note*]
+
+```cpp
+constexpr slice_type slice() noexcept;
+```
+
+3. *Effects*: Equivalent to `return slice_type(*this);`.
+
+```cpp
+constexpr const_slice_type slice() const noexcept;
+```
+
+4. *Effects*: Equivalent to `return const_slice_type(*this);`.
+
+### Class template `basic_json_slice`
+
+<pre highlight="c++">
+namespace std {
+  template&lt;class Node = basic_json_node&lt;>, class String = string, class Array = vector&lt;Node>,
+           class Object = map&lt;String, Node>, bool HasInteger = true, bool HasUInteger = true>
+    class basic_json_slice {
+    public:
+      static constexpr bool has_integer  = HasInteger;
+      static constexpr bool has_uinteger = HasUInteger;
+
+      using node_type   = Node;
+      using object_type = Object;
+      using value_type  = Node;
+      using array_type  = Array;
+      using string_type = String;
+
+      using slice_type       = basic_json_slice;
+      using const_slice_type = basic_const_json_slice&lt;Node, String, Array, Object,
+                                                      HasInteger, HasUInteger>;
+      using json_type        = basic_json&lt;Node, String, Array, Object,
+                                          HasInteger, HasUInteger>;
+
+      using number_type   = node_type::number_type;
+      using integer_type  = node_type::integer_type;
+      using uinteger_type = node_type::uinteger_type;
+
+      using char_type       = string_type::value_type;
+      using map_node_type   = object_type::value_type;
+      using allocator_type  = node_type::allocator_type;
+      using key_string_type = object_type::key_type;
+      using key_char_type   = key_string_type::value_type;
+
+      constexpr basic_json_slice() noexcept = default;
+      constexpr basic_json_slice(json_type& j) noexcept;
+      constexpr basic_json_slice(node_type& n) noexcept;
+      constexpr void swap(basic_json_slice& rhs) noexcept;
+      friend constexpr void swap(basic_json_slice& lhs, basic_json_slice& rhs) noexcept;
+
+      constexpr basic_json_slice& operator=(json_type& j) noexcept;
+      constexpr basic_json_slice& operator=(node_type& n) noexcept;
+
+      constexpr bool empty() const noexcept;
+      constexpr bool string() const noexcept;
+      constexpr bool null() const noexcept;
+      constexpr bool boolean() const noexcept;
+      constexpr bool number() const noexcept;
+      constexpr bool object() const noexcept;
+      constexpr bool array() const noexcept;
+      constexpr bool integer() const noexcept;
+      constexpr bool uinteger() const noexcept;
+
+      constexpr explicit operator bool() const;
+      constexpr explicit operator number_type() const;
+      constexpr explicit operator nulljson_t() const;
+      constexpr explicit operator const string_type&() const&;
+      constexpr explicit operator const array_type&() const&;
+      constexpr explicit operator const object_type&() const&;
+      constexpr explicit operator integer_type() const;
+      constexpr explicit operator uinteger_type() const;
+      constexpr basic_const_json_slice operator[](array_type::size_type pos) const;
+      constexpr basic_const_json_slice operator[](const key_string_type& k) const;
+      template&lt;class KeyStrLike>
+        constexpr basic_const_json_slice operator[](const KeyStrLike& k) const;
+      constexpr basic_const_json_slice operator[](const key_char_type* ks) const;
+
+      constexpr basic_json_slice& operator=(nulljson_t);
+      template&lt;class T>
+        constexpr basic_json_slice& operator=(T n);
+      constexpr basic_json_slice& operator=(const string_type& str);
+      constexpr basic_json_slice& operator=(string_type&& str);
+      constexpr basic_json_slice& operator=(const char_type* str);
+      template&lt;class StrLike>
+        constexpr basic_json_slice& operator=(const StrLike& str);
+      constexpr basic_json_slice operator[](array_type::size_type pos);
+      constexpr basic_json_slice operator[](const key_string_type& k);
+      template&lt;class KeyStrLike>
+        constexpr basic_json_slice operator[](const KeyStrLike& k);
+      constexpr basic_json_slice operator[](const key_char_type* ks);
+
+    private:
+      node_type* <i>node_</i> = nullptr;    // exposition only
+    };
+}
+</pre>
+
+1. Every specialization of `basic_json_slice` is a trivally copyable class that models `semiregular`.
+
+2. A `basic_json_slice` is considered valid if its <i>`node_`</i> member points to a `node_type` object within its lifetime.<br>
+    [*Note*: A default-constructed `basic_json_slice` is not valid. -- *end note*]
+
+3. Whenever `basic_json_slice` is valid, its referenced node is the object denoted by <code>*<i>node_</i></code>.
+
+#### Construction and swap
+
+```cpp
+constexpr basic_json_slice(json_type& j) noexcept;
+```
+
+1. *Effects*: Initializes <i>`node_`</i> with <code>addressof(j.<i>node_</i>)</code>.
+
+```cpp
+constexpr basic_json_slice(node_type& n) noexcept;
+```
+
+2. *Effects*: Initializes <i>`node_`</i> with `addressof(n)`.
+
+```cpp
+constexpr void swap(basic_json_slice& rhs) noexcept;
+friend constexpr void swap(basic_json_slice& lhs, basic_json_slice& rhs) noexcept;
+```
+
+3. *Effects*: Swaps the values of the <i>`node_`</i> member of both `basic_json_slice` objects.
+
+#### Rebinding
+
+```cpp
+constexpr basic_json_slice& operator=(json_type& j) noexcept;
+```
+
+1. *Effects*: Equivalent to `return *this = basic_json_slice{j};`.
+
+```cpp
+constexpr basic_json_slice& operator=(node_type& n) noexcept;
+```
+
+2. *Effects*: Equivalent to `return *this = basic_json_slice{n};`.
+
+#### Observers
+
+<pre highlight="c++">
+constexpr bool empty() const noexcept;
+constexpr bool string() const noexcept;
+constexpr bool null() const noexcept;
+constexpr bool boolean() const noexcept;
+constexpr bool number() const noexcept;
+constexpr bool object() const noexcept;
+constexpr bool array() const noexcept;
+constexpr bool integer() const noexcept;
+constexpr bool uinteger() const noexcept;
+
+constexpr explicit operator bool() const;
+constexpr explicit operator number_type() const;
+constexpr explicit operator nulljson_t() const;
+constexpr explicit operator const string_type&() const&;
+constexpr explicit operator const array_type&() const&;
+constexpr explicit operator const object_type&() const&;
+constexpr explicit operator integer_type() const;
+constexpr explicit operator uinteger_type() const;
+constexpr basic_const_json_slice operator[](array_type::size_type pos) const;
+constexpr basic_const_json_slice operator[](const key_string_type& k) const;
+template&lt;class KeyStrLike>
+  constexpr basic_const_json_slice operator[](const KeyStrLike& k) const;
+constexpr basic_const_json_slice operator[](const key_char_type* ks) const;
+</pre>
+
+1. Every observer function of `basic_json_slice` has the same constraints and semantics as converting the `basic_json_slice` to its `const_slice_type`
+    and then calling the corresponding member function of `basic_const_json_slice`.
+
+#### Modifiers
+
+1. A modifier function of `basic_json_slice` may change the state of the referenced node, but only if the node was in the empty state.
+    A `runtime_error` exception is thrown if one attempts to change the established non-empty state of the node.
+
+```cpp
+constexpr basic_json_slice& operator=(nulljson_t);
+```
+
+2. *Preconditions*: `*this` is valid.
+
+3. *Effects*:
+    - If the referenced node is in the empty state, sets it to the null state.
+    - Otherwise, if the referenced node is in the null state, does nothing.
+
+4. *Returns*: `*this`.
+
+5. *Throws*: A `runtime_error` exception if the referenced node is not in the empty or the null state.
+
+```cpp
+template<class T>
+  constexpr basic_json_slice& operator=(T n);
+```
+
+6. *Constraints*: `is_arithmetic_v<T>` is `true`.
+
+7. *Preconditions*: `*this` is valid.
+
+8. *Effects*:
+    - If the referenced node is in the empty state, performs <code>*<i>node_</i> = json_type{n}</code>.
+    - Otherwise, if
+        - `T` is `bool`, `n` is `true`, and the referenced node is in the true state, or
+        - `T` is `bool`, `n` is `false`, and the referenced node is in the false state,
+
+        then does nothing.
+    - Otherwise, if `HasInteger` and `signed_integral<T>` are both `true` and the referenced node is in the signed integral state,
+        replaces the stored signed integer value with `n`.
+    - Otherwise, if `HasUInteger` and `unsigned_integral<T>` are both `true` and the referenced node is in the unsigned integral state,
+        replaces the stored unsigned integer value with `n`.
+    - Otherwise, the referenced node is in the floating-point state, replaces the stored floating-point value with `static_cast<number_type>(n)`.
+    - Otherwise, throws a `runtime_error` exception.
+
+9. *Returns*: `*this`.
+
+```cpp
+constexpr basic_json_slice& operator=(const string_type& str);
+```
+
+10. *Preconditions*: `*this` is valid.
+
+11. *Effects*:
+    - If the referenced node is in the empty state, sets it to the string state and stores a string constructed from `str`.
+    - Otherwise, if the referenced node is in the string state, assigns `str` to the stored string.
+
+12. *Returns*: `*this`.
+
+13. *Throws*: A `runtime_error` exception if the referenced node is not in the empty or the string state.
+    Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
+
+```cpp
+constexpr basic_json_slice& operator=(string_type&& str);
+```
+
+14. *Preconditions*: `*this` is valid.
+
+15. *Effects*:
+    - If the referenced node is in the empty state, sets it to the string state and stores a string constructed from `std::move(str)`.
+    - Otherwise, if the referenced node is in the string state, assigns `std::move(str)` to the stored string.
+
+16. *Returns*: `*this`.
+
+17. *Throws*: A `runtime_error` exception if the referenced node is not in the empty or the string state.
+    Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
+
+```cpp
+constexpr basic_json_slice& operator=(const char_type* str);
+```
+
+18. *Preconditions*: `*this` is valid. If the referenced node is in the empty or the string state, `str` points to a null-terminated `char_type` sequence.
+
+19. *Effects*:
+    - If the referenced node is in the empty state, sets it to the string state and stores a string containing characters from `str` until `str + count`,
+	    where `count` is the number of characters in the null-terminated sequence.
+    - Otherwise, if the referenced node is in the string state, replaces the contents of `str` with that of the null-terminated sequence.
+
+20. *Returns*: `*this`.
+
+21. *Throws*: A `runtime_error` exception if the referenced node is not in the empty or the string state.
+    Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
+
+```cpp
+template<class StrLike>
+  constexpr basic_json_slice& operator=(const StrLike& str);
+```
+
+22. *Constraints*:
+    - `constructible_from<string_type, StrLike>` is `true`, and
+    - `is_convertible_v<const KeyStrLike&, const key_char_type*>` is `false`.
+
+23. *Preconditions*: `*this` is valid.
+
+24. *Effects*:
+    - If the referenced node is in the empty state, sets it to the string state and stores a string constructed from `str`.
+    - Otherwise, if the referenced node is in the string state, assigns `str` to the stored string.
+
+25. *Returns*: `*this`.
+
+26. *Throws*: A `runtime_error` exception if the referenced node is not in the empty or the string state.
+    Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
+
+```cpp
+constexpr basic_json_slice operator[](array_type::size_type pos);
+```
+
+27. *Preconditions*: `*this` is valid. If the referenced node is in the array state, `pos` is less than the length of the stored dynamic array.
+
+28. *Returns*: A `basic_json_slice` referencing the node at offset `pos` of the stored dynamic array if the referenced node is in the array state.
+
+29. *Throws*: A `runtime_error` exception if the referenced node is not in the array state.
+
+```cpp
+constexpr basic_json_slice operator[](const key_string_type& k);
+template<class KeyStrLike>
+  constexpr basic_json_slice operator[](const KeyStrLike& k);
+constexpr basic_json_slice operator[](const key_char_type* ks);
+```
+
+30. *Constraints*: For the template overload:
+    - `Object` is transparently comparable, and
+    - `is_convertible_v<const KeyStrLike&, const key_char_type*>` is `false`.
+
+31. *Preconditions*: `*this` is valid.
+    For the overload taking a `const key_char_type*`, if the referenced node is in the object state, `ks` points to a null-terminated `key_char_type` sequence.
+
+32. For the overload taking a `const key_char_type*`, let `k` be a `key_string_type` value containing characters in [`ks`, `ks + count`),
+        where `count` is the number of characters in the null-terminated sequence.
+
+32. *Effects*: If the referenced node is in the object state and no element with key `k` is found in its stored map,
+        inserts an element with key `k` and a value-initialized node into the stored map.
+
+34. *Returns*:
+    - If the referenced node is in the object state and an element with key `k` is found in its stored map,
+        a `basic_json_slice` referencing the mapped value of that element.
+    - Otherwise, if a new element `e` is inserted, a `basic_json_slice`, a `basic_json_slice` the mapped value of the inserted element.
+
+35. *Throws*: A `runtime_error` exception the referenced node is not in the object state.
+    Otherwise, the exception thrown when looking up the key, or by the allocation or construction of the inserted map element.
+
+### Class template `basic_const_json_slice`
+
+<pre highlight="c++">
+namespace std {
+  template&lt;class Node = basic_json_node&lt;>, class String = string, class Array = vector&lt;Node>,
+           class Object = map&lt;String, Node>, bool HasInteger = true, bool HasUInteger = true>
+    class basic_const_json_slice {
+    public:
+      static constexpr bool has_integer  = HasInteger;
+      static constexpr bool has_uinteger = HasUInteger;
+
+      using node_type   = Node;
+      using object_type = Object;
+      using value_type  = Node;
+      using array_type  = Array;
+      using string_type = String;
+
+      using slice_type       = basic_json_slice&lt;Node, String, Array, Object,
+                                                HasInteger, HasUInteger>;
+      using const_slice_type = basic_const_json_slice;
+      using json_type        = basic_json&lt;Node, String, Array, Object,
+                                          HasInteger, HasUInteger>;
+
+      using number_type   = node_type::number_type;
+      using integer_type  = node_type::integer_type;
+      using uinteger_type = node_type::uinteger_type;
+
+      using char_type       = string_type::value_type;
+      using map_node_type   = object_type::value_type;
+      using allocator_type  = node_type::allocator_type;
+      using key_string_type = object_type::key_type;
+      using key_char_type   = key_string_type::value_type;
+
+      constexpr basic_const_json_slice() noexcept = default;
+      constexpr basic_const_json_slice(const json_type& j) noexcept;
+      constexpr basic_const_json_slice(const node_type& n) noexcept;
+      constexpr basic_const_json_slice(const slice_type& s) noexcept;
+      constexpr void swap(basic_const_json_slice& rhs) noexcept;
+      friend constexpr void swap(basic_const_json_slice& lhs, basic_const_json_slice& rhs) noexcept;
+
+      constexpr bool empty() const noexcept;
+      constexpr bool string() const noexcept;
+      constexpr bool null() const noexcept;
+      constexpr bool boolean() const noexcept;
+      constexpr bool number() const noexcept;
+      constexpr bool object() const noexcept;
+      constexpr bool array() const noexcept;
+      constexpr bool integer() const noexcept;
+      constexpr bool uinteger() const noexcept;
+
+      constexpr explicit operator bool() const;
+      constexpr explicit operator number_type() const;
+      constexpr explicit operator nulljson_t() const;
+      constexpr explicit operator const string_type&() const&;
+      constexpr explicit operator const array_type&() const&;
+      constexpr explicit operator const object_type&() const&;
+      constexpr explicit operator integer_type() const;
+      constexpr explicit operator uinteger_type() const;
+      constexpr basic_const_json_slice operator[](array_type::size_type pos) const;
+      constexpr basic_const_json_slice operator[](const key_string_type& k) const;
+      template&lt;class KeyStrLike>
+        constexpr basic_const_json_slice operator[](const KeyStrLike& k) const;
+      constexpr basic_const_json_slice operator[](const key_char_type* ks) const;
+
+    private:
+      const node_type* <i>node_</i> = nullptr;  // exposition only
+    };
+}
+</pre>
+
+1. Every specialization of `basic_const_json_slice` is a trivally copyable class that models `semiregular`.
+
+2. A `basic_const_json_slice` is considered valid if its <i>`node_`</i> member points to a `node_type` object within its lifetime.<br>
+    [*Note*: A default-constructed `basic_const_json_slice` is not valid. -- *end note*]
+
+3. Whenever `basic_const_json_slice` is valid, its referenced node is the object denoted by <code>*<i>node_</i></code>.
+
+#### Construction and swap
+
+```cpp
+constexpr basic_const_json_slice(const json_type& j) noexcept;
+```
+
+1. *Effects*: Initializes <i>`node_`</i> with <code>addressof(j.<i>node_</i>)</code>.
+
+```cpp
+constexpr basic_const_json_slice(const node_type& n) noexcept;
+```
+
+2. *Effects*: Initializes <i>`node_`</i> with `addressof(n)`.
+
+```cpp
+constexpr basic_const_json_slice(const slice_type& s) noexcept;
+```
+
+3. *Effects*: Initializes <i>`node_`</i> with <code>s.<i>node_</i></code>.<br>
+    [*Note*: `*this` and `s` reference the same node after construction if `s` is valid. -- *end note*]
+
+```cpp
+constexpr void swap(basic_const_json_slice& rhs) noexcept;
+friend constexpr void swap(basic_const_json_slice& lhs, basic_const_json_slice& rhs) noexcept;
+```
+
+4. *Effects*: Swaps the values of the <i>`node_`</i> member of both `basic_const_json_slice` objects.
+
+#### Observers
+
+```cpp
+constexpr bool empty() const noexcept;
+```
+
+1. *Preconditions*: `*this` is valid.
+
+2. *Returns*: `true` if the referenced node is in the empty state, `false` otherwise.
+
+```cpp
+constexpr bool string() const noexcept;
+```
+
+3. *Preconditions*: `*this` is valid.
+
+4. *Returns*: `true` if the referenced node is in the string state, `false` otherwise.
+
+```cpp
+constexpr bool null() const noexcept;
+```
+
+5. *Preconditions*: `*this` is valid.
+
+6. *Returns*: `true` if the referenced node is in the null state, `false` otherwise.
+
+```cpp
+constexpr bool boolean() const noexcept;
+```
+
+7. *Preconditions*: `*this` is valid.
+
+8. *Returns*: `true` if the referenced node is in the true of the false state, `false` otherwise.
+
+```cpp
+constexpr bool number() const noexcept;
+```
+
+9. *Preconditions*: `*this` is valid.
+
+10. *Returns*: `true` if the referenced node is in the number state, `false` otherwise.
+
+```cpp
+constexpr bool object() const noexcept;
+```
+
+11. *Preconditions*: `*this` is valid.
+
+12. *Returns*: `true` if the referenced node is in the object state, `false` otherwise.
+
+```cpp
+constexpr bool array() const noexcept;
+```
+
+13. *Preconditions*: `*this` is valid.
+
+14. *Returns*: `true` if the referenced node is in the array state, `false` otherwise.
+
+```cpp
+constexpr bool integer() const noexcept;
+```
+
+15. *Constraints*: `HasInteger` is `true`.
+
+16. *Preconditions*: `*this` is valid.
+
+17. *Returns*: `true` if the referenced node is in the signed integral state, `false` otherwise.
+
+```cpp
+constexpr bool uinteger() const noexcept;
+```
+
+18. *Constraints*: `HasUInteger` is `true`.
+
+19. *Preconditions*: `*this` is valid.
+
+20. *Returns*: `true` if the referenced node is in the unsigned integral state, `false` otherwise.
+
+```cpp
+constexpr explicit operator bool() const;
+```
+
+21. *Preconditions*: `*this` is valid.
+
+22. *Returns*: `true` if the referenced node is in the true state, `false` if the referenced node is in the false state.
+
+23. *Throws*: A `runtime_error` exception if the referenced node is not in the true or the false state.
+
+```cpp
+constexpr explicit operator number_type() const;
+```
+
+24. *Preconditions*: `*this` is valid.
+
+25. *Returns*: The stored numeric value converted to `number_type` if the referenced node is in the floating-point, the signed integral, or the unsigned integral state.
+
+26. *Throws*: A `runtime_error` exception if the referenced node is not in the floating-point, the signed integral, or the unsigned integral state.
+
+```cpp
+constexpr explicit operator nulljson_t() const;
+```
+
+27. *Preconditions*: `*this` is valid.
+
+28. *Returns*: `nulljson_t{}` if the referenced node is in the null state.
+
+29. *Throws*: A `runtime_error` exception if the referenced node is not in the null state.
+
+```cpp
+constexpr explicit operator const string_type&() const&;
+```
+
+30. *Preconditions*: `*this` is valid.
+
+31. *Returns*: The reference to the stored string if the referenced node is in the string state.
+
+32. *Throws*: A `runtime_error` exception if the referenced node is not in the string state.
+
+```cpp
+constexpr explicit operator const array_type&() const&;
+```
+
+33. *Preconditions*: `*this` is valid.
+
+34. *Returns*: The reference to the stored dynamic array if the referenced node is in the array state.
+
+35. *Throws*: A `runtime_error` exception if the referenced node is not in the array state.
+
+```cpp
+constexpr explicit operator const object_type&() const&;
+```
+
+36. *Preconditions*: `*this` is valid.
+
+37. *Returns*: The reference to the stored map if the referenced node is in the object state.
+
+38. *Throws*: A `runtime_error` exception if the referenced node is not in the object state.
+
+```cpp
+constexpr explicit operator integer_type() const;
+```
+
+39. *Constraints*: `HasInteger` is `true`.
+
+40. *Preconditions*: `*this` is valid.
+
+41. *Returns*: The stored integer value if the referenced node is in the signed integral state.
+
+42. *Throws*: A `runtime_error` exception if the referenced node is not in the signed integral state.
+
+```cpp
+constexpr explicit operator uinteger_type() const;
+```
+
+43. *Constraints*: `HasUInteger` is `true`.
+
+44. *Preconditions*: `*this` is valid.
+
+45. *Returns*: The stored integer value if the referenced node is in the unsigned integral state.
+
+46. *Throws*: A `runtime_error` exception if the referenced node is not in the unsigned integral state.
+
+```cpp
+constexpr basic_const_json_slice operator[](array_type::size_type pos) const;
+```
+
+47. *Preconditions*: `*this` is valid. If the referenced node is in the array state, `pos` is less than the length of the stored dynamic array.
+
+48. *Returns*: A `basic_const_json_slice` referencing the node at offset `pos` of the stored dynamic array if the referenced node is in the array state.
+
+49. *Throws*: A `runtime_error` exception if the referenced node is not in the array state.
+
+```cpp
+constexpr basic_const_json_slice operator[](const key_string_type& k) const;
+template<class KeyStrLike>
+  constexpr basic_const_json_slice operator[](const KeyStrLike& k) const;
+constexpr basic_const_json_slice operator[](const key_char_type* ks) const;
+```
+
+50. *Constraints*: For the template overload:
+    - `Object` is transparently comparable, and
+    - `is_convertible_v<const KeyStrLike&, const key_char_type*>` is `false`.
+
+51. *Preconditions*: `*this` is valid.
+    For the overload taking a `const key_char_type*`, if the referenced node is in the object state, `ks` points to a null-terminated `key_char_type` sequence.
+
+52. For the overload taking a `const key_char_type*`, let `k` be a `key_string_type` value containing characters in [`ks`, `ks + count`),
+        where `count` is the number of characters in the null-terminated sequence.
+
+53. *Returns*: If the referenced node is in the object state and an element with key `k` is found in the stored map,
+    a `basic_const_json_slice` referencing the mapped value of that element.
+
+54. *Throws*: A `runtime_error` exception if the referenced node is not in the object state or no element with key `k` is found,
+    or the exception thrown when looking up the key.
+
+## Feature-test macro
+
+Add a new feature-test macro to [version.syn].
+
+<pre highlight="c++">
+#define __cpp_lib_json                              202<i>ymm</i>L // also in &lt;json>
+</pre>
 
 # Acknowledgements
 
