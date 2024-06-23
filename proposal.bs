@@ -45,7 +45,8 @@ Therefore, this proposal aims to provide a minimal JSON support library for C++,
 
 # Proposal
 
-I propose to add a `<json>` header and five classes (templates): `nulljson_t`, `basic_json_node`, `basic_json`, `basic_const_json_slice`, `basic_json_slice`.
+I propose to add a `<json>` header and the following classes (templates): `nulljson_t`, `basic_json_node`, `basic_json`, `basic_const_json_slice`, `basic_json_slice`.
+The `json_errc` enumeration and the `json_error` exception class are used to report errors.
 
 ```cpp
 struct nulljson_t;
@@ -70,6 +71,10 @@ template <typename Node, typename String,
 	typename Array, typename Object,
 	bool HasInteger, bool HasUInteger>
 class basic_json_slice;
+
+enum class errc;
+
+class json_error;
 ```
 
 # Design
@@ -294,6 +299,10 @@ namespace std {
   using json             = basic_json<>;
   using json_slice       = basic_json_slice<>;
   using const_json_slice = basic_const_json_slice<>;
+
+  enum class json_errc : <i>unspecified</i>;
+
+  class json_error;
 
   namespace pmr {
     template<class Number = double, class Integer = long long,
@@ -821,7 +830,7 @@ constexpr basic_const_json_slice operator[](const key_char_type* ks) const;
 #### Modifiers
 
 1. A modifier function of `basic_json_slice` may change the state of the referenced node, but only if the node was in the empty state.
-    A `runtime_error` exception is thrown if one attempts to change the established non-empty state of the node.
+    A `json_error` exception is thrown if one attempts to change the established non-empty state of the node.
 
 ```cpp
 constexpr basic_json_slice& operator=(nulljson_t);
@@ -835,7 +844,7 @@ constexpr basic_json_slice& operator=(nulljson_t);
 
 4. *Returns*: `*this`.
 
-5. *Throws*: A `runtime_error` exception if the referenced node is not in the empty or the null state.
+5. *Throws*: A `json_error` exception constructed from `json_errc::not_empty_or_null` if the referenced node is not in the empty or the null state.
 
 ```cpp
 template<class T>
@@ -858,7 +867,7 @@ template<class T>
     - Otherwise, if `HasUInteger` and `unsigned_integral<T>` are both `true` and the referenced node is in the unsigned integral state,
         replaces the stored unsigned integer value with `n`.
     - Otherwise, the referenced node is in the floating-point state, replaces the stored floating-point value with `static_cast<number_type>(n)`.
-    - Otherwise, throws a `runtime_error` exception.
+    - Otherwise, throws a `json_error` exception constructed from `json_errc::not_empty_or_number`;
 
 9. *Returns*: `*this`.
 
@@ -874,8 +883,9 @@ constexpr basic_json_slice& operator=(const string_type& str);
 
 12. *Returns*: `*this`.
 
-13. *Throws*: A `runtime_error` exception if the referenced node is not in the empty or the string state.
-    Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
+13. *Throws*:
+    - A `json_error` exception constructed from `json_errc::not_empty_or_string` if the referenced node is not in the empty or the string state.
+    - Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
 
 ```cpp
 constexpr basic_json_slice& operator=(string_type&& str);
@@ -889,8 +899,9 @@ constexpr basic_json_slice& operator=(string_type&& str);
 
 16. *Returns*: `*this`.
 
-17. *Throws*: A `runtime_error` exception if the referenced node is not in the empty or the string state.
-    Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
+17. *Throws*:
+    - A `json_error` exception constructed from `json_errc::not_empty_or_string` if the referenced node is not in the empty or the string state.
+    - Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
 
 ```cpp
 constexpr basic_json_slice& operator=(const char_type* str);
@@ -905,8 +916,9 @@ constexpr basic_json_slice& operator=(const char_type* str);
 
 20. *Returns*: `*this`.
 
-21. *Throws*: A `runtime_error` exception if the referenced node is not in the empty or the string state.
-    Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
+21. *Throws*:
+    - A `json_error` exception constructed from `json_errc::not_empty_or_string` if the referenced node is not in the empty or the string state.
+    - Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
 
 ```cpp
 template<class StrLike>
@@ -925,8 +937,9 @@ template<class StrLike>
 
 25. *Returns*: `*this`.
 
-26. *Throws*: A `runtime_error` exception if the referenced node is not in the empty or the string state.
-    Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
+26. *Throws*:
+    - A `json_error` exception constructed from `json_errc::not_empty_or_string` if the referenced node is not in the empty or the string state.
+    - Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
 
 ```cpp
 constexpr basic_json_slice operator[](array_type::size_type pos);
@@ -936,7 +949,7 @@ constexpr basic_json_slice operator[](array_type::size_type pos);
 
 28. *Returns*: A `basic_json_slice` referencing the node at offset `pos` of the stored dynamic array if the referenced node is in the array state.
 
-29. *Throws*: A `runtime_error` exception if the referenced node is not in the array state.
+29. *Throws*: A `json_error` exception constructed from `json_errc::nonarray_indexing` if the referenced node is not in the array state.
 
 ```cpp
 constexpr basic_json_slice operator[](const key_string_type& k);
@@ -963,8 +976,9 @@ constexpr basic_json_slice operator[](const key_char_type* ks);
         a `basic_json_slice` referencing the mapped value of that element.
     - Otherwise, if a new element `e` is inserted, a `basic_json_slice`, a `basic_json_slice` the mapped value of the inserted element.
 
-35. *Throws*: A `runtime_error` exception the referenced node is not in the object state.
-    Otherwise, the exception thrown when looking up the key, or by the allocation or construction of the inserted map element.
+35. *Throws*:
+    - A `json_error` exception constructed from `json_errc::nonobject_indexing` the referenced node is not in the object state.
+    - Otherwise, the exception thrown when looking up the key, or by the allocation or construction of the inserted map element.
 
 ### Class template `basic_const_json_slice`
 
@@ -1167,7 +1181,7 @@ constexpr explicit operator bool() const;
 
 22. *Returns*: `true` if the referenced node is in the true state, `false` if the referenced node is in the false state.
 
-23. *Throws*: A `runtime_error` exception if the referenced node is not in the true or the false state.
+23. *Throws*: A `json_error` exception constructed from `json_errc::not_boolean` if the referenced node is not in the true or the false state.
 
 ```cpp
 constexpr explicit operator number_type() const;
@@ -1177,7 +1191,7 @@ constexpr explicit operator number_type() const;
 
 25. *Returns*: The stored numeric value converted to `number_type` if the referenced node is in the floating-point, the signed integral, or the unsigned integral state.
 
-26. *Throws*: A `runtime_error` exception if the referenced node is not in the floating-point, the signed integral, or the unsigned integral state.
+26. *Throws*: A `json_error` exception constructed from `json_errc::not_number` if the referenced node is not in the floating-point, the signed integral, or the unsigned integral state.
 
 ```cpp
 constexpr explicit operator nulljson_t() const;
@@ -1187,7 +1201,7 @@ constexpr explicit operator nulljson_t() const;
 
 28. *Returns*: `nulljson_t{}` if the referenced node is in the null state.
 
-29. *Throws*: A `runtime_error` exception if the referenced node is not in the null state.
+29. *Throws*: A `json_error` exception constructed from `json_errc::not_null` if the referenced node is not in the null state.
 
 ```cpp
 constexpr explicit operator const string_type&() const&;
@@ -1197,7 +1211,7 @@ constexpr explicit operator const string_type&() const&;
 
 31. *Returns*: The reference to the stored string if the referenced node is in the string state.
 
-32. *Throws*: A `runtime_error` exception if the referenced node is not in the string state.
+32. *Throws*: A `json_error` exception constructed from `json_errc::not_string` if the referenced node is not in the string state.
 
 ```cpp
 constexpr explicit operator const array_type&() const&;
@@ -1207,7 +1221,7 @@ constexpr explicit operator const array_type&() const&;
 
 34. *Returns*: The reference to the stored dynamic array if the referenced node is in the array state.
 
-35. *Throws*: A `runtime_error` exception if the referenced node is not in the array state.
+35. *Throws*: A `json_error` exception constructed from `json_errc::not_array` if the referenced node is not in the array state.
 
 ```cpp
 constexpr explicit operator const object_type&() const&;
@@ -1217,7 +1231,7 @@ constexpr explicit operator const object_type&() const&;
 
 37. *Returns*: The reference to the stored map if the referenced node is in the object state.
 
-38. *Throws*: A `runtime_error` exception if the referenced node is not in the object state.
+38. *Throws*: A `json_error` exception constructed from `json_errc::not_object` if the referenced node is not in the object state.
 
 ```cpp
 constexpr explicit operator integer_type() const;
@@ -1229,7 +1243,7 @@ constexpr explicit operator integer_type() const;
 
 41. *Returns*: The stored integer value if the referenced node is in the signed integral state.
 
-42. *Throws*: A `runtime_error` exception if the referenced node is not in the signed integral state.
+42. *Throws*: A `json_error` exception constructed from `json_errc::not_integer` if the referenced node is not in the signed integral state.
 
 ```cpp
 constexpr explicit operator uinteger_type() const;
@@ -1241,7 +1255,7 @@ constexpr explicit operator uinteger_type() const;
 
 45. *Returns*: The stored integer value if the referenced node is in the unsigned integral state.
 
-46. *Throws*: A `runtime_error` exception if the referenced node is not in the unsigned integral state.
+46. *Throws*: A `json_error` exception constructed from `json_errc::not_uinteger` if the referenced node is not in the unsigned integral state.
 
 ```cpp
 constexpr basic_const_json_slice operator[](array_type::size_type pos) const;
@@ -1251,7 +1265,7 @@ constexpr basic_const_json_slice operator[](array_type::size_type pos) const;
 
 48. *Returns*: A `basic_const_json_slice` referencing the node at offset `pos` of the stored dynamic array if the referenced node is in the array state.
 
-49. *Throws*: A `runtime_error` exception if the referenced node is not in the array state.
+49. *Throws*: A `json_error` exception constructed from `json_errc::nonarray_indexing` if the referenced node is not in the array state.
 
 ```cpp
 constexpr basic_const_json_slice operator[](const key_string_type& k) const;
@@ -1273,8 +1287,92 @@ constexpr basic_const_json_slice operator[](const key_char_type* ks) const;
 53. *Returns*: If the referenced node is in the object state and an element with key `k` is found in the stored map,
     a `basic_const_json_slice` referencing the mapped value of that element.
 
-54. *Throws*: A `runtime_error` exception if the referenced node is not in the object state or no element with key `k` is found,
-    or the exception thrown when looking up the key.
+54. *Throws*:
+    - A `json_error` exception constructed from `json_errc::nonobject_indexing` if the referenced node is not in the object state.
+    - Otherwise, the exception thrown when looking up the key or `json_error` exception constructed from `json_errc::key_not_found` if no element with key `k` is found.
+
+### Error code enumeration `json_errc`
+
+<pre highlight="c++">
+namespace std {
+  enum class json_errc : <i>unspecified</i> {
+    // invalid access
+    is_empty = 1,
+    not_null,
+    not_boolean,
+    not_number,
+    not_integer,
+    not_uinteger,
+    not_string,
+    not_array,
+    not_object,
+    nonarray_indexing,
+    nonobject_indexing,
+    key_not_found,
+
+    // invalid modification
+    not_empty_or_null,
+    not_empty_or_boolean,
+    not_empty_or_number,
+    not_empty_or_integer,
+    not_empty_or_uinteger,
+    not_empty_or_string,
+    not_empty_or_array,
+    not_empty_or_object,
+
+    // deserialization failures
+    unsupported_option,
+    unexpect_token,
+    unexpect_comment,
+    unexpect_undefined,
+    missing_square_bracket,
+    missing_brace,
+    missing_double_quote,
+    number_overflow,
+    number_underflow,
+    integer_overflow,
+    integer_underflow,
+    uinteger_overflow,
+    illegal_character,
+    too_deep,
+    too_large,
+
+    // serialization failures
+    unexpect_empty,
+    number_nan,
+    number_inf,
+
+    // reflection failures
+    unexpect_null,
+    unexpect_type,
+  };
+}
+</pre>
+
+1. The enumeration type `json_errc` is used for reporting JSON-related errors.
+
+### Class `json_error`
+
+<pre highlight="c++">
+namespace std {
+  class json_error : public runtime_error {
+  public:
+    json_error(json_errc ec);
+    json_errc code() const noexcept { return <i>code_</i>; }
+
+  private:
+    json_errc <i>code_</i>;
+  };
+}
+</pre>
+
+1. The class `format_error` defines the exception type that reports errors from the JSON-related operations.
+
+```cpp
+json_error(json_errc ec);
+```
+
+2. *Postconditions*: <code><i>code_</i> == ec</code>.
 
 ## Feature-test macro
 

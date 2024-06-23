@@ -65,6 +65,109 @@ namespace bizwen
 	    bool HasInteger = true, bool HasUInteger = true>
 	class basic_json_slice;
 
+	enum class json_errc
+	{
+		// for accessor
+		is_empty = 1,
+		not_null,
+		not_boolean,
+		not_number,
+		not_integer,
+		not_uinteger,
+		not_string,
+		not_array,
+		not_object,
+		nonarray_indexing,
+		nonobject_indexing,
+		key_not_found,
+		// for modifier
+		not_empty_or_null,
+		not_empty_or_boolean,
+		not_empty_or_number,
+		not_empty_or_integer,
+		not_empty_or_uinteger,
+		not_empty_or_string,
+		not_empty_or_array,
+		not_empty_or_object,
+		// for deserializer
+		unsupported_option,
+		unexpect_token,
+		unexpect_comment,
+		unexpect_undefined,
+		missing_square_bracket,
+		missing_brace,
+		missing_double_quote,
+		number_overflow,
+		number_underflow,
+		integer_overflow,
+		integer_underflow,
+		uinteger_overflow,
+		illegal_character,
+		too_deep,
+		too_large,
+		// for serializer
+		unexpect_empty,
+		number_nan,
+		number_inf,
+		// for reflector
+		unexpect_null,
+		unexpect_type,
+	};
+
+	class json_error: public std::runtime_error
+	{
+	public:
+		json_error(json_errc ec)
+		    : std::runtime_error("")
+		    , code_(ec)
+		{
+		}
+
+		json_errc code() const noexcept { return code_; }
+
+		const char* what() const override
+		{
+			switch (code_)
+			{
+			case json_errc::not_null:
+				return "JSON error: value isn't a null.";
+			case json_errc::not_boolean:
+				return "JSON error: value not a boolean.";
+			case json_errc::not_integer:
+				return "JSON error: value isn't an integer.";
+			case json_errc::not_uinteger:
+				return "JSON error: value isn't an unsigned integer.";
+			case json_errc::not_number:
+				return "JSON error: value isn't a number.";
+			case json_errc::not_string:
+				return "JSON error: value isn't a string.";
+			case json_errc::not_array:
+				return "JSON error: value isn't an array.";
+			case json_errc::not_object:
+				return "JSON error: value isn't an object.";
+			case json_errc::nonarray_indexing:
+				return "JSON error: value isn't an array but is accessed using operator[].";
+			case json_errc::nonobject_indexing:
+				return "JSON error: value isn't an object but is accessed using operator[].";
+			case json_errc::key_not_found:
+				return "JSON error: key does not exist.";
+			case json_errc::not_empty_or_null:
+				return "JSON error: current value is not empty or not null.";
+			case json_errc::not_empty_or_boolean:
+				return "JSON error: current value is not empty or not bool.";
+			case json_errc::not_empty_or_number:
+				return "JSON error: current value is not empty or not a number.";
+			case json_errc::not_empty_or_string:
+				return "JSON error: current value is not empty or not a string.";
+			default:
+				return "JSON error: unexpected error.";
+			}
+		}
+
+	private:
+		json_errc code_;
+	};
+
 	// https://cplusplus.github.io/LWG/issue3917
 	// since the types of string, array and map are unknown at this point,
 	// memory allocation can only be done by instantiating char.
@@ -311,7 +414,7 @@ namespace bizwen
 			constexpr explicit operator bool() const
 			{
 				if (!boolean())
-					throw std::runtime_error("json error: value not a boolean.");
+					throw json_error(json_errc::not_boolean);
 
 				auto k = kind();
 
@@ -330,13 +433,13 @@ namespace bizwen
 				else if (k == kind_t::uinteger)
 					return s.uint_;
 
-				throw std::runtime_error("json error: value isn't a number.");
+				throw json_error(json_errc::not_number);
 			}
 
 			constexpr explicit operator nulljson_t() const
 			{
 				if (!null())
-					throw std::runtime_error("json error: value isn't a null.");
+					throw json_error(json_errc::not_null);
 
 				return nulljson;
 			}
@@ -344,7 +447,7 @@ namespace bizwen
 			constexpr explicit operator string_type const&() const&
 			{
 				if (!string())
-					throw std::runtime_error("json error: value isn't a string.");
+					throw json_error(json_errc::not_string);
 
 				return *static_cast<string_type const*>(stor().str_);
 			}
@@ -352,7 +455,7 @@ namespace bizwen
 			constexpr explicit operator array_type const&() const&
 			{
 				if (!array())
-					throw std::runtime_error("json error: value isn't an array.");
+					throw json_error(json_errc::not_array);
 
 				return *static_cast<array_type const*>(stor().arr_);
 			}
@@ -360,7 +463,7 @@ namespace bizwen
 			constexpr explicit operator object_type const&() const&
 			{
 				if (!object())
-					throw std::runtime_error("json error: value isn't an object.");
+					throw json_error(json_errc::not_object);
 
 				return *static_cast<object_type const*>(stor().obj_);
 			}
@@ -369,7 +472,7 @@ namespace bizwen
 			    requires HasInteger
 			{
 				if (!integer())
-					throw std::runtime_error("json error: value isn't an integer.");
+					throw json_error(json_errc::not_integer);
 
 				return stor().int_;
 			}
@@ -378,7 +481,7 @@ namespace bizwen
 			    requires HasUInteger
 			{
 				if (!uinteger())
-					throw std::runtime_error("json error: value isn't an unsigned integer.");
+					throw json_error(json_errc::not_uinteger);
 
 				return stor().uint_;
 			}
@@ -479,13 +582,13 @@ namespace bizwen
 		constexpr auto basic_json_slice_common_base<Node, String, Array, Object, HasInteger, HasUInteger>::operator[](key_string_type const& k) const -> const_slice_type
 		{
 			if (!object())
-				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
+				throw json_error(json_errc::nonobject_indexing);
 
 			auto& o = *static_cast<object_type*>(stor().obj_);
 			auto i = o.find(k);
 
 			if (i == o.end())
-				throw std::runtime_error("key does not exist.");
+				throw json_error(json_errc::key_not_found);
 
 			auto& [_, v] = *i;
 
@@ -502,13 +605,13 @@ namespace bizwen
 		constexpr auto basic_json_slice_common_base<Node, String, Array, Object, HasInteger, HasUInteger>::operator[](KeyStrLike const& k) const -> const_slice_type
 		{
 			if (!object())
-				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
+				throw json_error(json_errc::nonobject_indexing);
 
 			auto& o = *static_cast<object_type*>(stor().obj_);
 			auto i = o.find(k);
 
 			if (i == o.end())
-				throw std::runtime_error("key does not exist.");
+				throw json_error(json_errc::key_not_found);
 
 			auto& [_, v] = *i;
 
@@ -522,13 +625,13 @@ namespace bizwen
 		constexpr auto basic_json_slice_common_base<Node, String, Array, Object, HasInteger, HasUInteger>::operator[](key_char_type const* k) const -> const_slice_type
 		{
 			if (!object())
-				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
+				throw json_error(json_errc::nonobject_indexing);
 
 			auto& o = *static_cast<object_type*>(stor().obj_);
 			auto i = o.find(k);
 
 			if (i == o.end())
-				throw std::runtime_error("key does not exist.");
+				throw json_error(json_errc::key_not_found);
 
 			auto& [_, v] = *i;
 
@@ -542,7 +645,7 @@ namespace bizwen
 		constexpr auto basic_json_slice_common_base<Node, String, Array, Object, HasInteger, HasUInteger>::operator[](array_type::size_type pos) const -> const_slice_type
 		{
 			if (!array())
-				throw std::runtime_error("json error: value isn't an array but is accessed using operator[].");
+				throw json_error(json_errc::nonarray_indexing);
 
 			auto& a = *static_cast<array_type*>(stor().arr_);
 
@@ -669,7 +772,7 @@ namespace bizwen
 		constexpr explicit operator string_type&() &
 		{
 			if (!string())
-				throw std::runtime_error("json error: value isn't a string.");
+				throw json_error(json_errc::not_string);
 
 			return *static_cast<string_type*>(stor().str_);
 		}
@@ -677,7 +780,7 @@ namespace bizwen
 		constexpr explicit operator array_type&() &
 		{
 			if (!array())
-				throw std::runtime_error("json error: value isn't an array.");
+				throw json_error(json_errc::not_array);
 
 			return *static_cast<array_type*>(stor().arr_);
 		}
@@ -685,7 +788,7 @@ namespace bizwen
 		constexpr explicit operator object_type&() &
 		{
 			if (!object())
-				throw std::runtime_error("json error: value isn't an object.");
+				throw json_error(json_errc::not_object);
 
 			return *static_cast<object_type*>(stor().obj_);
 		}
@@ -723,7 +826,7 @@ namespace bizwen
 			auto e = empty();
 
 			if (!object() && !e)
-				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
+				throw json_error(json::errc::nonobject_indexing);
 
 			if (e)
 				allocate_object();
@@ -743,7 +846,7 @@ namespace bizwen
 			auto e = empty();
 
 			if (!object() && !e)
-				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
+				throw json_error(json::errc::nonobject_indexing);
 
 			if (e)
 				allocate_object();
@@ -760,7 +863,7 @@ namespace bizwen
 			auto e = empty();
 
 			if (!object() && !e)
-				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
+				throw json_error(json_errc::nonobject_indexing);
 
 			if (e)
 				allocate_object();
@@ -775,7 +878,7 @@ namespace bizwen
 		constexpr basic_json_slice operator[](array_type::size_type pos)
 		{
 			if (!array())
-				throw std::runtime_error("json error: value isn't an array but is accessed using operator[].");
+				throw json_error(json_errc::nonarray_indexing);
 
 			auto const& a = *static_cast<array_type const*>(stor().arr_);
 
@@ -788,7 +891,7 @@ namespace bizwen
 			bool is_empty = empty();
 
 			if (!is_string && !is_empty)
-				throw std::runtime_error("json error: current value is not empty or not a string.");
+				throw json_error(json_errc::not_empty_or_string);
 
 			if (is_string)
 			{
@@ -814,7 +917,7 @@ namespace bizwen
 			bool is_empty = empty();
 
 			if (!is_string && !is_empty)
-				throw std::runtime_error("json error: current value is not empty or not a string.");
+				throw json_error(json_errc::not_empty_or_string);
 
 			if (is_string)
 			{
@@ -840,7 +943,7 @@ namespace bizwen
 			bool is_empty = empty();
 
 			if (!is_string && !is_empty)
-				throw std::runtime_error("json error: current value is not empty or not a string.");
+				throw json_error(json_errc::not_empty_or_string);
 
 			if (is_string)
 			{
@@ -869,7 +972,7 @@ namespace bizwen
 			bool is_empty = empty();
 
 			if (!is_string && !is_empty)
-				throw std::runtime_error("json error: current value is not empty or not a string.");
+				throw json_error(json_errc::not_empty_or_string);
 
 			if (is_string)
 			{
@@ -895,7 +998,7 @@ namespace bizwen
 			bool is_empty = empty();
 
 			if (!is_null && !is_empty)
-				throw std::runtime_error("json error: current value is not empty or not null.");
+				throw json_error(json_errc::not_empty_or_null);
 
 			if (is_empty)
 				node_->kind_ = kind_t::null;
@@ -913,7 +1016,7 @@ namespace bizwen
 				bool is_empty = empty();
 
 				if (!is_boolean && !is_empty)
-					throw std::runtime_error("json error: current value is not empty or not bool.");
+					throw json_error(json_errc::not_empty_or_boolean);
 
 				if (is_empty)
 					node_->kind_ = (n ? kind_t::true_value : kind_t::false_value);
@@ -924,7 +1027,7 @@ namespace bizwen
 				bool is_empty = empty();
 
 				if (!is_number && !is_empty)
-					throw std::runtime_error("json error: current value is not empty or not a number.");
+					throw json_error(json_errc::not_empty_or_number);
 
 				node_->stor_.int_ = n;
 				node_->kind_ = kind_t::integer;
@@ -935,7 +1038,7 @@ namespace bizwen
 				bool is_empty = empty();
 
 				if (!is_number && !is_empty)
-					throw std::runtime_error("json error: current value is not empty or not a number.");
+					throw json_error(json_errc::not_empty_or_number);
 
 				node_->stor_.uint_ = n;
 				node_->kind_ = kind_t::uinteger;
@@ -946,7 +1049,7 @@ namespace bizwen
 				bool is_empty = empty();
 
 				if (!is_number && !is_empty)
-					throw std::runtime_error("json error: current value is not empty or not a number.");
+					throw json_error(json_errc::not_empty_or_number);
 
 				node_->stor_.num_ = n;
 				node_->kind_ = kind_t::number;
@@ -1738,50 +1841,6 @@ namespace bizwen
 		treat_empty_as_null = 0x200,
 		treat_empty_as_undefined = 0x400,
 		treat_empty_as_literal = 0x800, // debug only
-	};
-
-	enum class json_error
-	{
-		// for accessor
-		is_empty = 1,
-		not_null,
-		not_boolean,
-		not_number,
-		not_integer,
-		not_uinteger,
-		not_array,
-		not_object,
-		// for modifier
-		not_empty_or_null,
-		not_empty_or_boolean,
-		not_empty_or_number,
-		not_empty_or_integer,
-		not_empty_or_uinteger,
-		not_empty_or_array,
-		not_empty_or_object,
-		// for deserializer
-		unsupported_option,
-		unexpect_token,
-		unexpect_comment,
-		unexpect_undefined,
-		missing_square_bracket,
-		missing_brace,
-		missing_double_quote,
-		number_overflow,
-		number_underflow,
-		integer_overflow,
-		integer_underflow,
-		uinteger_overflow,
-		illegal_character,
-		too_deep,
-		too_large,
-		// for serializer
-		unexpect_empty,
-		number_nan,
-		number_inf,
-		// for reflector
-		unexpect_null,
-		unexpect_type,
 	};
 
 	using json = basic_json<>;
