@@ -1,3 +1,6 @@
+#ifndef BIZWEN_BASIC_JSON_HPP
+#define BIZWEN_BASIC_JSON_HPP
+
 #include <cassert>
 #include <iterator>
 #include <map>
@@ -39,7 +42,16 @@ namespace bizwen
 		    typename Object,
 		    bool HasInteger, bool HasUInteger>
 		struct basic_json_slice_common_base;
-	}
+
+		template <typename T, typename Node>
+		constexpr T* alloc_from_node(Node& node);
+
+		template <typename T, typename Node>
+		constexpr void dealloc_from_node(Node& node, T* p) noexcept;
+
+		template <typename T, typename Node>
+		struct node_variant_alloc_guard;
+	} // namespace detail
 
 	template <typename Node = basic_json_node<>, typename String = std::string,
 	    typename Array = std::vector<Node>,
@@ -52,6 +64,109 @@ namespace bizwen
 	    typename Object = std::map<String, Node>,
 	    bool HasInteger = true, bool HasUInteger = true>
 	class basic_json_slice;
+
+	enum class json_errc
+	{
+		// for accessor
+		is_empty = 1,
+		not_null,
+		not_boolean,
+		not_number,
+		not_integer,
+		not_uinteger,
+		not_string,
+		not_array,
+		not_object,
+		nonarray_indexing,
+		nonobject_indexing,
+		key_not_found,
+		// for modifier
+		not_empty_or_null,
+		not_empty_or_boolean,
+		not_empty_or_number,
+		not_empty_or_integer,
+		not_empty_or_uinteger,
+		not_empty_or_string,
+		not_empty_or_array,
+		not_empty_or_object,
+		// for deserializer
+		unsupported_option,
+		unexpect_token,
+		unexpect_comment,
+		unexpect_undefined,
+		missing_square_bracket,
+		missing_brace,
+		missing_double_quote,
+		number_overflow,
+		number_underflow,
+		integer_overflow,
+		integer_underflow,
+		uinteger_overflow,
+		illegal_character,
+		too_deep,
+		too_large,
+		// for serializer
+		unexpect_empty,
+		number_nan,
+		number_inf,
+		// for reflector
+		unexpect_null,
+		unexpect_type,
+	};
+
+	class json_error: public std::runtime_error
+	{
+	public:
+		json_error(json_errc ec)
+		    : std::runtime_error("")
+		    , code_(ec)
+		{
+		}
+
+		json_errc code() const noexcept { return code_; }
+
+		const char* what() const override
+		{
+			switch (code_)
+			{
+			case json_errc::not_null:
+				return "JSON error: value isn't a null.";
+			case json_errc::not_boolean:
+				return "JSON error: value not a boolean.";
+			case json_errc::not_integer:
+				return "JSON error: value isn't an integer.";
+			case json_errc::not_uinteger:
+				return "JSON error: value isn't an unsigned integer.";
+			case json_errc::not_number:
+				return "JSON error: value isn't a number.";
+			case json_errc::not_string:
+				return "JSON error: value isn't a string.";
+			case json_errc::not_array:
+				return "JSON error: value isn't an array.";
+			case json_errc::not_object:
+				return "JSON error: value isn't an object.";
+			case json_errc::nonarray_indexing:
+				return "JSON error: value isn't an array but is accessed using operator[].";
+			case json_errc::nonobject_indexing:
+				return "JSON error: value isn't an object but is accessed using operator[].";
+			case json_errc::key_not_found:
+				return "JSON error: key does not exist.";
+			case json_errc::not_empty_or_null:
+				return "JSON error: current value is not empty or not null.";
+			case json_errc::not_empty_or_boolean:
+				return "JSON error: current value is not empty or not bool.";
+			case json_errc::not_empty_or_number:
+				return "JSON error: current value is not empty or not a number.";
+			case json_errc::not_empty_or_string:
+				return "JSON error: current value is not empty or not a string.";
+			default:
+				return "JSON error: unexpected error.";
+			}
+		}
+
+	private:
+		json_errc code_;
+	};
 
 	// https://cplusplus.github.io/LWG/issue3917
 	// since the types of string, array and map are unknown at this point,
@@ -82,6 +197,15 @@ namespace bizwen
 		    typename Object,
 		    bool HasInteger, bool HasUInteger>
 		friend struct detail::basic_json_slice_common_base;
+
+		template <typename T, typename Node>
+		friend constexpr T* detail::alloc_from_node(Node& node);
+
+		template <typename T, typename Node>
+		friend constexpr void detail::dealloc_from_node(Node& node, T* p) noexcept;
+
+		template <typename T, typename Node>
+		friend struct detail::node_variant_alloc_guard;
 
 		template <typename Node, typename String,
 		    typename Array,
@@ -122,11 +246,31 @@ namespace bizwen
 		stor_t stor_{};
 		kind_t kind_{};
 
+		constexpr Allocator& get_allocator_ref() noexcept
+		{
+			return (Allocator&)(*this);
+		}
+		constexpr const Allocator& get_allocator_ref() const noexcept
+		{
+			return (const Allocator&)(*this);
+		}
+
 	public:
-		constexpr basic_json_node() noexcept = default;
+		constexpr basic_json_node() noexcept(std::is_nothrow_default_constructible_v<Allocator>)
+		    requires std::default_initializable<Allocator>
+		    : Allocator()
+		{
+		}
+
+		constexpr explicit basic_json_node(Allocator const& a) noexcept
+		    : Allocator(a)
+		{
+		}
+
 		constexpr basic_json_node(basic_json_node const&) = default;
-		constexpr basic_json_node(basic_json_node&& rhs) noexcept = default;
-		constexpr basic_json_node& operator=(basic_json_node&& rhs) noexcept = default;
+		constexpr basic_json_node(basic_json_node&&) noexcept = default;
+		constexpr basic_json_node& operator=(basic_json_node const&) = default;
+		constexpr basic_json_node& operator=(basic_json_node&&) noexcept = default;
 	};
 
 	namespace detail
@@ -270,7 +414,7 @@ namespace bizwen
 			constexpr explicit operator bool() const
 			{
 				if (!boolean())
-					throw std::runtime_error("json error: value not a boolean.");
+					throw json_error(json_errc::not_boolean);
 
 				auto k = kind();
 
@@ -289,13 +433,13 @@ namespace bizwen
 				else if (k == kind_t::uinteger)
 					return s.uint_;
 
-				throw std::runtime_error("json error: value isn't a number.");
+				throw json_error(json_errc::not_number);
 			}
 
 			constexpr explicit operator nulljson_t() const
 			{
 				if (!null())
-					throw std::runtime_error("json error: value isn't a null.");
+					throw json_error(json_errc::not_null);
 
 				return nulljson;
 			}
@@ -303,7 +447,7 @@ namespace bizwen
 			constexpr explicit operator string_type const&() const&
 			{
 				if (!string())
-					throw std::runtime_error("json error: value isn't a string.");
+					throw json_error(json_errc::not_string);
 
 				return *static_cast<string_type const*>(stor().str_);
 			}
@@ -311,7 +455,7 @@ namespace bizwen
 			constexpr explicit operator array_type const&() const&
 			{
 				if (!array())
-					throw std::runtime_error("json error: value isn't an array.");
+					throw json_error(json_errc::not_array);
 
 				return *static_cast<array_type const*>(stor().arr_);
 			}
@@ -319,7 +463,7 @@ namespace bizwen
 			constexpr explicit operator object_type const&() const&
 			{
 				if (!object())
-					throw std::runtime_error("json error: value isn't an object.");
+					throw json_error(json_errc::not_object);
 
 				return *static_cast<object_type const*>(stor().obj_);
 			}
@@ -328,7 +472,7 @@ namespace bizwen
 			    requires HasInteger
 			{
 				if (!integer())
-					throw std::runtime_error("json error: value isn't an integer.");
+					throw json_error(json_errc::not_integer);
 
 				return stor().int_;
 			}
@@ -337,7 +481,7 @@ namespace bizwen
 			    requires HasUInteger
 			{
 				if (!uinteger())
-					throw std::runtime_error("json error: value isn't an unsigned integer.");
+					throw json_error(json_errc::not_uinteger);
 
 				return stor().uint_;
 			}
@@ -401,8 +545,9 @@ namespace bizwen
 			lhs.swap(rhs);
 		}
 
-		// similar to iterators, default construction is allowed, but except for operator=,
+		// Similar to iterators, default construction is allowed, but except for operator=,
 		// operations on default-constructed slice cause undefined behavior.
+		// The default constructor is intentionally provided for default arguments.
 		constexpr basic_const_json_slice() noexcept = default;
 
 		constexpr basic_const_json_slice(basic_const_json_slice&&) noexcept = default;
@@ -438,13 +583,13 @@ namespace bizwen
 		constexpr auto basic_json_slice_common_base<Node, String, Array, Object, HasInteger, HasUInteger>::operator[](key_string_type const& k) const -> const_slice_type
 		{
 			if (!object())
-				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
+				throw json_error(json_errc::nonobject_indexing);
 
 			auto& o = *static_cast<object_type*>(stor().obj_);
 			auto i = o.find(k);
 
 			if (i == o.end())
-				throw std::runtime_error("key does not exist.");
+				throw json_error(json_errc::key_not_found);
 
 			auto& [_, v] = *i;
 
@@ -461,13 +606,13 @@ namespace bizwen
 		constexpr auto basic_json_slice_common_base<Node, String, Array, Object, HasInteger, HasUInteger>::operator[](KeyStrLike const& k) const -> const_slice_type
 		{
 			if (!object())
-				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
+				throw json_error(json_errc::nonobject_indexing);
 
 			auto& o = *static_cast<object_type*>(stor().obj_);
 			auto i = o.find(k);
 
 			if (i == o.end())
-				throw std::runtime_error("key does not exist.");
+				throw json_error(json_errc::key_not_found);
 
 			auto& [_, v] = *i;
 
@@ -481,13 +626,13 @@ namespace bizwen
 		constexpr auto basic_json_slice_common_base<Node, String, Array, Object, HasInteger, HasUInteger>::operator[](key_char_type const* k) const -> const_slice_type
 		{
 			if (!object())
-				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
+				throw json_error(json_errc::nonobject_indexing);
 
 			auto& o = *static_cast<object_type*>(stor().obj_);
 			auto i = o.find(k);
 
 			if (i == o.end())
-				throw std::runtime_error("key does not exist.");
+				throw json_error(json_errc::key_not_found);
 
 			auto& [_, v] = *i;
 
@@ -501,12 +646,61 @@ namespace bizwen
 		constexpr auto basic_json_slice_common_base<Node, String, Array, Object, HasInteger, HasUInteger>::operator[](array_type::size_type pos) const -> const_slice_type
 		{
 			if (!array())
-				throw std::runtime_error("json error: value isn't an array but is accessed using operator[].");
+				throw json_error(json_errc::nonarray_indexing);
 
 			auto& a = *static_cast<array_type*>(stor().arr_);
 
 			return a[pos];
 		}
+
+		template <typename T, typename Node>
+		constexpr T* alloc_from_node(Node& node)
+		{
+			using ator_t = std::allocator_traits<typename Node::allocator_type>::template rebind_alloc<T>;
+			return std::to_address(ator_t(node.get_allocator_ref()).allocate(1));
+		}
+
+		template <typename T, typename Node>
+		constexpr void dealloc_from_node(Node& node, T* p) noexcept
+		{
+			using ator_t = std::allocator_traits<typename Node::allocator_type>::template rebind_alloc<T>;
+			using ator_ptr = std::allocator_traits<ator_t>::pointer;
+			using ator_ptr_traits = std::pointer_traits<ator_ptr>;
+			return ator_t(node.get_allocator_ref()).deallocate(ator_ptr_traits::pointer_to(*p), 1);
+		}
+
+		template <typename T, typename Node>
+		struct node_variant_alloc_guard
+		{
+			T* ptr;
+			Node& node;
+
+			node_variant_alloc_guard(node_variant_alloc_guard const&) = delete;
+
+			constexpr explicit node_variant_alloc_guard(Node& n)
+			    : node(n)
+			{
+				ptr = detail::alloc_from_node<T>(node);
+			}
+
+			constexpr void release() noexcept
+			{
+				ptr = nullptr;
+			}
+
+			constexpr T* get() noexcept
+			{
+				assert(ptr);
+
+				return ptr;
+			}
+
+			constexpr ~node_variant_alloc_guard()
+			{
+				if (ptr)
+					detail::dealloc_from_node(node, ptr);
+			}
+		};
 	}
 
 	template <typename Node, typename String,
@@ -554,8 +748,9 @@ namespace bizwen
 			lhs.swap(rhs);
 		}
 
-		// similar to iterators, default construction is allowed, but except for operator=,
+		// Similar to iterators, default construction is allowed, but except for operator=,
 		// operations on default-constructed slice cause undefined behavior.
+		// The default constructor is intentionally provided for default arguments.
 		constexpr basic_json_slice() noexcept = default;
 
 		constexpr basic_json_slice(basic_json_slice&&) noexcept = default;
@@ -579,7 +774,7 @@ namespace bizwen
 		constexpr explicit operator string_type&() &
 		{
 			if (!string())
-				throw std::runtime_error("json error: value isn't a string.");
+				throw json_error(json_errc::not_string);
 
 			return *static_cast<string_type*>(stor().str_);
 		}
@@ -587,7 +782,7 @@ namespace bizwen
 		constexpr explicit operator array_type&() &
 		{
 			if (!array())
-				throw std::runtime_error("json error: value isn't an array.");
+				throw json_error(json_errc::not_array);
 
 			return *static_cast<array_type*>(stor().arr_);
 		}
@@ -595,7 +790,7 @@ namespace bizwen
 		constexpr explicit operator object_type&() &
 		{
 			if (!object())
-				throw std::runtime_error("json error: value isn't an object.");
+				throw json_error(json_errc::not_object);
 
 			return *static_cast<object_type*>(stor().obj_);
 		}
@@ -611,8 +806,8 @@ namespace bizwen
 
 		constexpr void allocate_object()
 		{
-			typename json_type::template alloc_guard_<object_type> guard(*node_);
-			auto ator = object_ator(*node_);
+			detail::node_variant_alloc_guard<object_type, node_type> guard(*node_);
+			auto ator = object_ator(node_->get_allocator_ref());
 			auto rawptr = guard.get();
 			object_ator_traits::construct(ator, rawptr);
 			stor().obj_ = rawptr;
@@ -633,13 +828,13 @@ namespace bizwen
 			auto e = empty();
 
 			if (!object() && !e)
-				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
+				throw json_error(json::errc::nonobject_indexing);
 
 			if (e)
 				allocate_object();
 
 			auto& o = *static_cast<object_type*>(stor().obj_);
-			auto [i, _] = o.emplace(k, node_type{});
+			auto [i, _] = o.emplace(k, node_type{ node_->get_allocator_ref() });
 			auto& [_, v] = *i;
 
 			return v;
@@ -653,13 +848,13 @@ namespace bizwen
 			auto e = empty();
 
 			if (!object() && !e)
-				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
+				throw json_error(json::errc::nonobject_indexing);
 
 			if (e)
 				allocate_object();
 
 			auto& o = *static_cast<object_type*>(stor().obj_);
-			auto [i, _] = o.emplace(k, node_type{});
+			auto [i, _] = o.emplace(k, node_type{ node_->get_allocator_ref() });
 			auto& [_, v] = *i;
 
 			return v;
@@ -670,13 +865,13 @@ namespace bizwen
 			auto e = empty();
 
 			if (!object() && !e)
-				throw std::runtime_error("json error: value isn't an object but is accessed using operator[].");
+				throw json_error(json_errc::nonobject_indexing);
 
 			if (e)
 				allocate_object();
 
 			auto& o = *static_cast<object_type*>(stor().obj_);
-			auto [i, _] = o.emplace(k, node_type{});
+			auto [i, _] = o.emplace(k, node_type{ node_->get_allocator_ref() });
 			auto& [_, v] = *i;
 
 			return v;
@@ -685,7 +880,7 @@ namespace bizwen
 		constexpr basic_json_slice operator[](array_type::size_type pos)
 		{
 			if (!array())
-				throw std::runtime_error("json error: value isn't an array but is accessed using operator[].");
+				throw json_error(json_errc::nonarray_indexing);
 
 			auto const& a = *static_cast<array_type const*>(stor().arr_);
 
@@ -698,7 +893,7 @@ namespace bizwen
 			bool is_empty = empty();
 
 			if (!is_string && !is_empty)
-				throw std::runtime_error("json error: current value is not empty or not a string.");
+				throw json_error(json_errc::not_empty_or_string);
 
 			if (is_string)
 			{
@@ -706,8 +901,8 @@ namespace bizwen
 			}
 			else // empty
 			{
-				typename json_type::template alloc_guard_<string_type> guard(*node_);
-				auto ator = string_ator(*node_);
+				detail::node_variant_alloc_guard<string_type, node_type> guard(*node_);
+				auto ator = string_ator(node_->get_allocator_ref());
 				auto rawptr = guard.get();
 				string_ator_traits::construct(ator, rawptr, str);
 				stor().str_ = rawptr;
@@ -724,7 +919,7 @@ namespace bizwen
 			bool is_empty = empty();
 
 			if (!is_string && !is_empty)
-				throw std::runtime_error("json error: current value is not empty or not a string.");
+				throw json_error(json_errc::not_empty_or_string);
 
 			if (is_string)
 			{
@@ -732,8 +927,8 @@ namespace bizwen
 			}
 			else // empty
 			{
-				typename json_type::template alloc_guard_<string_type> guard(*node_);
-				auto ator = string_ator(*node_);
+				detail::node_variant_alloc_guard<string_type, node_type> guard(*node_);
+				auto ator = string_ator(node_->get_allocator_ref());
 				auto rawptr = guard.get();
 				string_ator_traits::construct(ator, rawptr, std::move(str));
 				stor().str_ = rawptr;
@@ -750,7 +945,7 @@ namespace bizwen
 			bool is_empty = empty();
 
 			if (!is_string && !is_empty)
-				throw std::runtime_error("json error: current value is not empty or not a string.");
+				throw json_error(json_errc::not_empty_or_string);
 
 			if (is_string)
 			{
@@ -758,8 +953,8 @@ namespace bizwen
 			}
 			else // empty
 			{
-				typename json_type::template alloc_guard_<string_type> guard(*node_);
-				auto ator = string_ator(*node_);
+				detail::node_variant_alloc_guard<string_type, node_type> guard(*node_);
+				auto ator = string_ator(node_->get_allocator_ref());
 				auto rawptr = guard.get();
 				string_ator_traits::construct(ator, rawptr, str);
 				stor().str_ = rawptr;
@@ -779,7 +974,7 @@ namespace bizwen
 			bool is_empty = empty();
 
 			if (!is_string && !is_empty)
-				throw std::runtime_error("json error: current value is not empty or not a string.");
+				throw json_error(json_errc::not_empty_or_string);
 
 			if (is_string)
 			{
@@ -787,8 +982,8 @@ namespace bizwen
 			}
 			else
 			{
-				typename json_type::template alloc_guard_<string_type> guard(*node_);
-				auto ator = string_ator(*node_);
+				detail::node_variant_alloc_guard<string_type, node_type> guard(*node_);
+				auto ator = string_ator(node_->get_allocator_ref());
 				auto rawptr = guard.get();
 				string_ator_traits::construct(ator, rawptr, str);
 				stor().str_ = rawptr;
@@ -805,7 +1000,7 @@ namespace bizwen
 			bool is_empty = empty();
 
 			if (!is_null && !is_empty)
-				throw std::runtime_error("json error: current value is not empty or not null.");
+				throw json_error(json_errc::not_empty_or_null);
 
 			if (is_empty)
 				node_->kind_ = kind_t::null;
@@ -823,7 +1018,7 @@ namespace bizwen
 				bool is_empty = empty();
 
 				if (!is_boolean && !is_empty)
-					throw std::runtime_error("json error: current value is not empty or not bool.");
+					throw json_error(json_errc::not_empty_or_boolean);
 
 				if (is_empty)
 					node_->kind_ = (n ? kind_t::true_value : kind_t::false_value);
@@ -834,7 +1029,7 @@ namespace bizwen
 				bool is_empty = empty();
 
 				if (!is_number && !is_empty)
-					throw std::runtime_error("json error: current value is not empty or not a number.");
+					throw json_error(json_errc::not_empty_or_number);
 
 				node_->stor_.int_ = n;
 				node_->kind_ = kind_t::integer;
@@ -845,7 +1040,7 @@ namespace bizwen
 				bool is_empty = empty();
 
 				if (!is_number && !is_empty)
-					throw std::runtime_error("json error: current value is not empty or not a number.");
+					throw json_error(json_errc::not_empty_or_number);
 
 				node_->stor_.uint_ = n;
 				node_->kind_ = kind_t::uinteger;
@@ -856,7 +1051,7 @@ namespace bizwen
 				bool is_empty = empty();
 
 				if (!is_number && !is_empty)
-					throw std::runtime_error("json error: current value is not empty or not a number.");
+					throw json_error(json_errc::not_empty_or_number);
 
 				node_->stor_.num_ = n;
 				node_->kind_ = kind_t::number;
@@ -942,6 +1137,11 @@ namespace bizwen
 		using object_ator = std::allocator_traits<allocator_type>::template rebind_alloc<Object>;
 		using object_ator_traits = std::allocator_traits<object_ator>;
 
+		static constexpr bool is_ator_stateless_ = std::allocator_traits<allocator_type>::is_always_equal::value;
+		static constexpr bool is_pocca_ = std::allocator_traits<allocator_type>::propagate_on_container_copy_assignment::value;
+		static constexpr bool is_pocma_ = std::allocator_traits<allocator_type>::propagate_on_container_move_assignment::value;
+		static constexpr bool is_pocs_ = std::allocator_traits<allocator_type>::propagate_on_container_swap::value;
+
 		friend const_slice_type;
 		friend slice_type;
 
@@ -957,7 +1157,7 @@ namespace bizwen
 		static_assert(std::random_access_iterator<typename string_type::iterator>);
 		static_assert(std::bidirectional_iterator<typename object_type::iterator>);
 		static_assert(std::random_access_iterator<typename key_string_type::iterator>);
-		static_assert(std::same_as<basic_json_node<number_type, integer_type, uinteger_type>, node_type>);
+		static_assert(std::same_as<basic_json_node<number_type, integer_type, uinteger_type, allocator_type>, node_type>);
 
 		node_type node_;
 
@@ -978,32 +1178,17 @@ namespace bizwen
 			return node_.stor_;
 		}
 
-		template <typename T>
-		static constexpr T* alloc_from_node(node_type& node)
+		static constexpr void clear_node(node_type& node) noexcept
 		{
-			return std::to_address(typename traits_t::template rebind_alloc<T>(node).allocate(1));
-		}
-
-		template <typename T>
-		static constexpr void dealloc_from_node(node_type& node, T* p) noexcept
-		{
-			using ator_t = traits_t::template rebind_alloc<T>;
-			using ator_ptr = std::allocator_traits<ator_t>::pointer;
-			using ator_ptr_traits = std::pointer_traits<ator_ptr>;
-			return ator_t(node).deallocate(ator_ptr_traits::pointer_to(*p), 1);
-		}
-
-		static constexpr void destroy_node(node_type& node) noexcept
-		{
-			auto k = node.kind_;
 			auto& s = node.stor_;
 
-			switch (k)
+			switch (node.kind_)
 			{
 			case kind_t::string: {
 				auto p = static_cast<string_type*>(s.str_);
-				p->~string_type();
-				dealloc_from_node(node, p);
+				auto ator = string_ator(node.get_allocator_ref());
+				string_ator_traits::destroy(ator, p);
+				detail::dealloc_from_node(node, p);
 
 				break;
 			}
@@ -1013,11 +1198,12 @@ namespace bizwen
 				for (auto&& i : *p)
 				{
 					auto&& json = basic_json(std::move(i));
-					json.destroy();
+					json.clear();
 				}
 
-				p->~array_type();
-				dealloc_from_node(node, p);
+				auto ator = array_ator(node.get_allocator_ref());
+				array_ator_traits::destroy(ator, p);
+				detail::dealloc_from_node(node, p);
 
 				break;
 			}
@@ -1027,11 +1213,12 @@ namespace bizwen
 				for (auto&& [_, v] : *p)
 				{
 					auto&& json = basic_json(std::move(v));
-					json.destroy();
+					json.clear();
 				}
 
-				p->~object_type();
-				dealloc_from_node(node, p);
+				auto ator = object_ator(node.get_allocator_ref());
+				object_ator_traits::destroy(ator, p);
+				detail::dealloc_from_node(node, p);
 
 				break;
 			}
@@ -1039,47 +1226,15 @@ namespace bizwen
 				// make clang happy
 			}
 			}
+
+			s = stor_t{};
+			node.kind_ = kind_t{};
 		}
 
-		constexpr void destroy() noexcept
+		constexpr void clear() noexcept
 		{
-			destroy_node(node_);
+			clear_node(node_);
 		}
-
-		template <typename T>
-		struct alloc_guard_
-		{
-			T* ptr;
-			node_type& node;
-
-			constexpr alloc_guard_() noexcept = delete;
-
-			constexpr alloc_guard_(alloc_guard_ const&) noexcept = delete;
-
-			constexpr explicit alloc_guard_(node_type& n)
-			    : node(n)
-			{
-				ptr = basic_json::alloc_from_node<T>(node);
-			}
-
-			constexpr void release() noexcept
-			{
-				ptr = nullptr;
-			}
-
-			constexpr T* get() noexcept
-			{
-				assert(ptr);
-
-				return ptr;
-			}
-
-			constexpr ~alloc_guard_()
-			{
-				if (ptr)
-					basic_json::dealloc_from_node(node, ptr);
-			}
-		};
 
 		struct rollbacker_array_part_
 		{
@@ -1105,7 +1260,7 @@ namespace bizwen
 
 				for (auto begin = array.begin(); begin != sentry; ++begin)
 				{
-					basic_json::destroy_node(*begin);
+					basic_json::clear_node(*begin);
 				}
 			}
 		};
@@ -1139,7 +1294,7 @@ namespace bizwen
 
 				for (auto begin = array.begin(); begin != end; ++begin)
 				{
-					basic_json::destroy_node(*begin);
+					basic_json::clear_node(*begin);
 				}
 			}
 		};
@@ -1171,13 +1326,12 @@ namespace bizwen
 				for (auto begin = object.begin(); begin != end; ++begin)
 				{
 					auto&& [key, value] = *begin;
-					basic_json::destroy_node(value);
+					basic_json::clear_node(value);
 				}
 			}
 		};
 
-	public:
-		constexpr void swap(basic_json& rhs) noexcept
+		constexpr void swap_without_ator(basic_json& rhs) noexcept
 		{
 			{
 				auto temp = stor();
@@ -1191,47 +1345,131 @@ namespace bizwen
 			}
 		}
 
-		friend constexpr void swap(basic_json& lhs, basic_json& rhs) noexcept
+	public:
+		constexpr void swap(basic_json& rhs) noexcept // strengthened
+		{
+			swap_without_ator(rhs);
+			if constexpr (!is_ator_stateless_)
+			{
+				if constexpr (is_pocs_)
+				{
+					using std::swap;
+					swap(node_.get_allocator_ref(), rhs.node_.get_allocator_ref()); // ADL-swap
+				}
+				else
+				{
+					// UB if unequal
+					assert(node_.get_allocator_ref() == rhs.node_.get_allocator_ref());
+				}
+			}
+		}
+
+		friend constexpr void swap(basic_json& lhs, basic_json& rhs) noexcept // strengthened
 		{
 			lhs.swap(rhs);
 		}
 
-		constexpr basic_json() noexcept = default;
+		// clang-format off
+		constexpr basic_json() requires std::default_initializable<allocator_type> = default;
+		// clang-format on
+
+		constexpr explicit basic_json(allocator_type const& a) noexcept
+		    : node_(a)
+		{
+		}
 
 		constexpr basic_json(basic_json&& rhs) noexcept
+		    : node_(rhs.node_.get_allocator_ref())
 		{
-			rhs.swap(*this);
+			rhs.swap_without_ator(*this);
 		}
+		constexpr basic_json(basic_json&& rhs, allocator_type const& a) noexcept(is_ator_stateless_)
+		    : node_(a)
+		{
+			if constexpr (is_ator_stateless_)
+			{
+				rhs.swap_without_ator(*this);
+			}
+			else
+			{
+				if (a == rhs.node_.get_allocator_ref())
+				{
+					rhs.swap_without_ator(*this);
+				}
+				else
+				{
+					clone(rhs);
+					rhs.clear();
+				}
+			}
+		}
+
 		constexpr basic_json(basic_json const& rhs)
+		    : node_(traits_t::select_on_container_copy_construction(rhs.node_.get_allocator_ref()))
+		{
+			clone(rhs);
+		}
+		constexpr explicit basic_json(basic_json const& rhs, allocator_type const& a)
+		    : node_(a)
 		{
 			clone(rhs);
 		}
 
 		constexpr basic_json& operator=(basic_json const& rhs)
 		{
-			destroy();
-			clone(rhs);
+			if (this != std::addressof(rhs))
+			{
+				clear();
+				if constexpr (!is_ator_stateless_ && is_pocca_)
+				{
+					node_.get_allocator_ref() = rhs.node_.get_allocator_ref();
+				}
+				clone(rhs);
+			}
 
 			return *this;
 		}
 
-		constexpr basic_json& operator=(basic_json&& rhs) noexcept
+		constexpr basic_json& operator=(basic_json&& rhs) noexcept(is_ator_stateless_ || is_pocma_)
 		{
-			rhs.swap(*this);
+			if constexpr (is_ator_stateless_)
+			{
+				rhs.swap_without_ator(*this);
+			}
+			else if constexpr (is_pocma_)
+			{
+				rhs.swap_without_ator(*this);
+				node_.get_allocator_ref() = std::move(rhs.node_.get_allocator_ref());
+			}
+			else
+			{
+				if (node_.get_allocator_ref() == rhs.node_.get_allocator_ref())
+				{
+					rhs.swap_without_ator(*this);
+				}
+				else
+				{
+					clear();
+					clone(rhs);
+					rhs.clear();
+				}
+			}
 
 			return *this;
 		}
 
-		constexpr basic_json(decltype(nullptr)) noexcept = delete; // prevent implicit construct string
+		constexpr basic_json(decltype(nullptr), allocator_type const& = allocator_type()) noexcept = delete; // prevent implicit constructing string
 
-		constexpr basic_json(nulljson_t) noexcept
+		constexpr basic_json(nulljson_t, allocator_type const& a = allocator_type()) noexcept
+		    : node_(a)
 		{
 			kind(kind_t::null);
 		}
 
 		template <typename T>
 		    requires std::is_arithmetic_v<T>
-		constexpr basic_json(T n) noexcept
+		constexpr basic_json(T n, allocator_type const& a = allocator_type()) noexcept
+		    : node_(a)
 		{
 			if constexpr (std::same_as<T, bool>)
 			{
@@ -1254,10 +1492,11 @@ namespace bizwen
 			}
 		}
 
-		constexpr explicit basic_json(string_type v)
+		constexpr explicit basic_json(string_type v, allocator_type const& a = allocator_type())
+		    : node_(a)
 		{
-			alloc_guard_<string_type> guard(node_);
-			auto ator = string_ator(node_);
+			detail::node_variant_alloc_guard<string_type, node_type> guard(node_);
+			auto ator = string_ator(node_.get_allocator_ref());
 			auto rawptr = guard.get();
 			string_ator_traits::construct(ator, rawptr, std::move(v));
 			stor().str_ = rawptr;
@@ -1265,10 +1504,11 @@ namespace bizwen
 			kind(kind_t::string);
 		}
 
-		constexpr basic_json(char_type const* begin, char_type const* end)
+		constexpr basic_json(char_type const* begin, char_type const* end, allocator_type const& a = allocator_type())
+		    : node_(a)
 		{
-			alloc_guard_<string_type> guard(node_);
-			auto ator = string_ator(node_);
+			detail::node_variant_alloc_guard<string_type, node_type> guard(node_);
+			auto ator = string_ator(node_.get_allocator_ref());
 			auto rawptr = guard.get();
 			string_ator_traits::construct(ator, rawptr, begin, end);
 			stor().str_ = rawptr;
@@ -1276,10 +1516,11 @@ namespace bizwen
 			kind(kind_t::string);
 		}
 
-		constexpr basic_json(char_type const* str, string_type::size_type count)
+		constexpr basic_json(char_type const* str, string_type::size_type count, allocator_type const& a = allocator_type())
+		    : node_(a)
 		{
-			alloc_guard_<string_type> guard(node_);
-			auto ator = string_ator(node_);
+			detail::node_variant_alloc_guard<string_type, node_type> guard(node_);
+			auto ator = string_ator(node_.get_allocator_ref());
 			auto rawptr = guard.get();
 			string_ator_traits::construct(ator, rawptr, str, count);
 			stor().str_ = rawptr;
@@ -1287,10 +1528,11 @@ namespace bizwen
 			kind(kind_t::string);
 		}
 
-		constexpr explicit basic_json(char_type const* str)
+		constexpr explicit basic_json(char_type const* str, allocator_type const& a = allocator_type())
+		    : node_(a)
 		{
-			alloc_guard_<string_type> guard(node_);
-			auto ator = string_ator(node_);
+			detail::node_variant_alloc_guard<string_type, node_type> guard(node_);
+			auto ator = string_ator(node_.get_allocator_ref());
 			auto rawptr = guard.get();
 			string_ator_traits::construct(ator, rawptr, str);
 			stor().str_ = rawptr;
@@ -1301,10 +1543,11 @@ namespace bizwen
 		template <typename StrLike>
 		    requires std::constructible_from<string_type, StrLike>
 		    && (std::is_convertible_v<StrLike const&, char_type const*> == false)
-		constexpr basic_json(StrLike const& str)
+		constexpr basic_json(StrLike const& str, allocator_type const& a = allocator_type())
+		    : node_(a)
 		{
-			alloc_guard_<string_type> guard(node_);
-			auto ator = string_ator(node_);
+			detail::node_variant_alloc_guard<string_type, node_type> guard(node_);
+			auto ator = string_ator(node_.get_allocator_ref());
 			auto rawptr = guard.get();
 			string_ator_traits::construct(ator, rawptr, str);
 			stor().str_ = rawptr;
@@ -1312,11 +1555,12 @@ namespace bizwen
 			kind(kind_t::string);
 		}
 
-		constexpr basic_json(array_type arr)
+		constexpr basic_json(array_type arr, allocator_type const& a = allocator_type())
+		    : node_(a)
 		{
 			rollbacker_array_all_ rollbacker(arr);
-			alloc_guard_<array_type> guard(node_);
-			auto ator = array_ator(node_);
+			detail::node_variant_alloc_guard<array_type, node_type> guard(node_);
+			auto ator = array_ator(node_.get_allocator_ref());
 			auto rawptr = guard.get();
 			array_ator_traits::construct(ator, rawptr, std::move(arr));
 			stor().arr_ = rawptr;
@@ -1325,11 +1569,12 @@ namespace bizwen
 			kind(kind_t::array);
 		}
 
-		constexpr basic_json(object_type obj)
+		constexpr basic_json(object_type obj, allocator_type const& a = allocator_type())
+		    : node_(a)
 		{
 			rollbacker_map_all_ rollbacker(obj);
-			alloc_guard_<object_type> guard(node_);
-			auto ator = object_ator(node_);
+			detail::node_variant_alloc_guard<object_type, node_type> guard(node_);
+			auto ator = object_ator(node_.get_allocator_ref());
 			auto rawptr = guard.get();
 			object_ator_traits::construct(ator, rawptr, std::move(obj));
 			stor().obj_ = rawptr;
@@ -1339,10 +1584,22 @@ namespace bizwen
 		}
 
 		constexpr basic_json(node_type&& n) noexcept
+		    : node_(std::move(n))
 		{
-			kind(kind_t{});
-			stor() = stor_t{};
-			node_ = std::move(n);
+			n.kind_ = kind_t{};
+			n.stor_ = stor_t{};
+		}
+
+		constexpr basic_json(node_type&& n, allocator_type const& a) noexcept
+		    : node_(a)
+		{
+			kind(std::exchange(n.kind_, kind_t{}));
+			stor() = std::exchange(n.stor_, stor_t{});
+		}
+
+		constexpr allocator_type get_allocator() const noexcept
+		{
+			return node_.get_allocator_ref();
 		}
 
 		[[nodiscard("discard nodes will cause leaks")]] constexpr operator node_type() && noexcept
@@ -1365,8 +1622,8 @@ namespace bizwen
 			{
 			case kind_t::string: {
 				auto const& rstr = *static_cast<string_type const*>(rs.str_);
-				alloc_guard_<string_type> mem(lhs);
-				auto ator = string_ator(lhs);
+				detail::node_variant_alloc_guard<string_type, node_type> mem(lhs);
+				auto ator = string_ator(lhs.get_allocator_ref());
 				auto lptr = mem.get();
 				string_ator_traits::construct(ator, lptr, rstr);
 				mem.release();
@@ -1377,8 +1634,8 @@ namespace bizwen
 				if constexpr (std::is_trivially_copyable_v<allocator_type>)
 				{
 					auto const& rarr = *static_cast<array_type const*>(rs.arr_);
-					alloc_guard_<array_type> guard(lhs);
-					auto ator = array_ator(lhs);
+					detail::node_variant_alloc_guard<array_type, node_type> guard(lhs);
+					auto ator = array_ator(lhs.get_allocator_ref());
 					auto lptr = guard.get();
 					array_ator_traits::construct(ator, lptr, rarr);
 					array_type& larr{ *lptr };
@@ -1398,8 +1655,8 @@ namespace bizwen
 				else
 				{
 					auto const& rarr = *static_cast<array_type const*>(rs.arr_);
-					alloc_guard_<array_type> guard(lhs);
-					auto ator = array_ator(lhs);
+					detail::node_variant_alloc_guard<array_type, node_type> guard(lhs);
+					auto ator = array_ator(lhs.get_allocator_ref());
 					auto lptr = guard.get();
 					array_ator_traits::construct(ator, lptr);
 					array_type& larr{ *lptr };
@@ -1410,7 +1667,7 @@ namespace bizwen
 					auto last = rarr.end();
 					for (; first != last; ++first)
 					{
-						basic_json temp;
+						basic_json temp{ lhs.node_.get_allocator() };
 						clone_node(temp.node_, *first);
 						larr.push_back(std::move(temp));
 					}
@@ -1422,8 +1679,8 @@ namespace bizwen
 			}
 			case kind_t::object: {
 				auto const& robj = *static_cast<object_type const*>(rs.obj_);
-				alloc_guard_<object_type> guard(lhs);
-				auto ator = object_ator(lhs);
+				detail::node_variant_alloc_guard<object_type, node_type> guard(lhs);
+				auto ator = object_ator(lhs.get_allocator_ref());
 				auto lptr = guard.get();
 				object_ator_traits::construct(ator, lptr);
 				object_type& lobj{ *lptr };
@@ -1435,7 +1692,7 @@ namespace bizwen
 				for (; first != last; ++first)
 				{
 					auto const& [rkey, rvalue] = *first;
-					basic_json temp;
+					basic_json temp{ lhs.get_allocator_ref() };
 					clone_node(temp.node_, rvalue);
 					lobj.emplace(rkey, std::move(temp.node_));
 				}
@@ -1461,7 +1718,7 @@ namespace bizwen
 	public:
 		constexpr ~basic_json() noexcept
 		{
-			destroy();
+			clear();
 		}
 
 		constexpr slice_type slice() noexcept
@@ -1588,51 +1845,54 @@ namespace bizwen
 		treat_empty_as_literal = 0x800, // debug only
 	};
 
-	enum class json_error
-	{
-		// for accessor
-		is_empty = 1,
-		not_null,
-		not_boolean,
-		not_number,
-		not_integer,
-		not_uinteger,
-		not_array,
-		not_object,
-		// for modifier
-		not_empty_or_null,
-		not_empty_or_boolean,
-		not_empty_or_number,
-		not_empty_or_integer,
-		not_empty_or_uinteger,
-		not_empty_or_array,
-		not_empty_or_object,
-		// for deserializer
-		unsupported_option,
-		unexpect_token,
-		unexpect_comment,
-		unexpect_undefined,
-		missing_square_bracket,
-		missing_brace,
-		missing_double_quote,
-		number_overflow,
-		number_underflow,
-		integer_overflow,
-		integer_underflow,
-		uinteger_overflow,
-		illegal_character,
-		too_deep,
-		too_large,
-		// for serializer
-		unexpect_empty,
-		number_nan,
-		number_inf,
-		// for reflector
-		unexpect_null,
-		unexpect_type,
-	};
-
 	using json = basic_json<>;
 	using json_slice = basic_json_slice<>;
 	using const_json_slice = basic_const_json_slice<>;
+
+	namespace pmr
+	{
+		template <typename Number = double, typename Integer = long long, typename UInteger = unsigned long long>
+		using basic_json_node = bizwen::basic_json_node<Number, Integer, UInteger, std::pmr::polymorphic_allocator<char>>;
+
+		template <typename Node = pmr::basic_json_node<>, typename String = std::pmr::string,
+		    typename Array = std::pmr::vector<Node>,
+		    typename Object = std::pmr::map<String, Node>,
+		    bool HasInteger = true, bool HasUInteger = true>
+		using basic_json_slice = bizwen::basic_json_slice<Node, String, Array, Object, HasInteger, HasUInteger>;
+
+		template <typename Node = pmr::basic_json_node<>, typename String = std::pmr::string,
+		    typename Array = std::pmr::vector<Node>,
+		    typename Object = std::pmr::map<String, Node>,
+		    bool HasInteger = true, bool HasUInteger = true>
+		using basic_const_json_slice = bizwen::basic_const_json_slice<Node, String, Array, Object, HasInteger, HasUInteger>;
+
+		template <typename Node = pmr::basic_json_node<>, typename String = std::pmr::string,
+		    typename Array = std::pmr::vector<Node>,
+		    typename Object = std::pmr::map<String, Node>,
+		    bool HasInteger = true, bool HasUInteger = true>
+		using basic_json = bizwen::basic_json<Node, String, Array, Object, HasInteger, HasUInteger>;
+
+		using json = basic_json<>;
+		using json_slice = basic_json_slice<>;
+		using const_json_slice = basic_const_json_slice<>;
+	} // namespace pmr
 } // namespace bizwen
+
+// these class templates have nested allocator_type, but shoudn't be uses-allocator constructed
+
+template <typename Number, typename Integer, typename UInteger, typename Allocator, typename Alloc2>
+struct std::uses_allocator<bizwen::basic_json_node<Number, Integer, UInteger, Allocator>, Alloc2>: std::false_type
+{
+};
+
+template <typename Node, typename String, typename Array, typename Object, bool HasInteger, bool HasUInteger, typename Alloc>
+struct std::uses_allocator<bizwen::basic_json_slice<Node, String, Array, Object, HasInteger, HasUInteger>, Alloc>: std::false_type
+{
+};
+
+template <typename Node, typename String, typename Array, typename Object, bool HasInteger, bool HasUInteger, typename Alloc>
+struct std::uses_allocator<bizwen::basic_const_json_slice<Node, String, Array, Object, HasInteger, HasUInteger>, Alloc>: std::false_type
+{
+};
+
+#endif // defined(BIZWEN_BASIC_JSON_HPP)

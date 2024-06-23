@@ -45,7 +45,8 @@ Therefore, this proposal aims to provide a minimal JSON support library for C++,
 
 # Proposal
 
-I propose to add a `<json>` header and five classes (templates): `nulljson_t`, `basic_json_node`, `basic_json`, `basic_const_json_slice`, `basic_json_slice`.
+I propose to add a `<json>` header and the following classes (templates): `nulljson_t`, `basic_json_node`, `basic_json`, `basic_const_json_slice`, `basic_json_slice`.
+The `json_errc` enumeration and the `json_error` exception class are used to report errors.
 
 ```cpp
 struct nulljson_t;
@@ -70,6 +71,10 @@ template <typename Node, typename String,
 	typename Array, typename Object,
 	bool HasInteger, bool HasUInteger>
 class basic_json_slice;
+
+enum class errc;
+
+class json_error;
 ```
 
 # Design
@@ -136,7 +141,7 @@ and then insert them into the container, finally, move `a` or `m` to the constru
 
 `basic_json_slice` and `basic_const_json_slice` are trivially copyable, so copying a slice has low overhead. No operation on a slice produces a copy of the `basic_json` object. For subscript operations, a new `basic_json_slice` or `basic_const_json_slice` is returned.
 
-A default-constructed slice holds a null pointer, and thus all operations that need to queries or modifies the node results in undefined behavior on such a slice.
+A default-constructed slice holds a null pointer, and thus all operations that need to queries or modifies the node results in undefined behavior on such a slice. The default-constructibility of slices is mainly used for default arguments.
 
 ## Summary
 
@@ -261,9 +266,11 @@ int main()
 }
 ```
 
-# Proposal
+# Library wording
 
-## Wording
+## JSON processing
+
+[*Drafting note:* Add this subclause to [utilities]. -- *end drafting note*]
 
 ### Header `<json>` synopsis
 
@@ -294,6 +301,35 @@ namespace std {
   using json             = basic_json<>;
   using json_slice       = basic_json_slice<>;
   using const_json_slice = basic_const_json_slice<>;
+
+  enum class json_errc : <i>unspecified</i>;
+
+  class json_error;
+
+  namespace pmr {
+    template<class Number = double, class Integer = long long,
+             class UInteger = unsigned long long>
+    using basic_json_node = std::basic_json_node<Number, Integer, UInteger,
+                                                 polymorphic_allocator<>>;
+
+    template<class Node = basic_json_node<>, class String = string, class Array = vector<Node>,
+             class Object = map<String, Node>, bool HasInteger = true, bool HasUInteger = true>
+    using basic_json = std::basic_json<Node, String, Array, Object, HasInteger, HasUInteger>;
+
+    template<class Node = basic_json_node<>, class String = string, class Array = vector<Node>,
+             class Object = map<String, Node>, bool HasInteger = true, bool HasUInteger = true>
+    using basic_json_slice = std::basic_json_slice<Node, String, Array, Object,
+                                                   HasInteger, HasUInteger>;
+
+    template<class Node = basic_json_node<>, class String = string, class Array = vector<Node>,
+             class Object = map<String, Node>, bool HasInteger = true, bool HasUInteger = true>
+    using basic_const_json_slice = std::basic_const_json_slice<Node, String, Array, Object,
+                                                               HasInteger, HasUInteger>;
+
+    using json             = basic_json<>;
+    using json_slice       = basic_json_slice<>;
+    using const_json_slice = basic_const_json_slice<>;
+  }
 }
 ```
 
@@ -341,8 +377,14 @@ namespace std {
       using uinteger_type  = UInteger;
       using allocator_type = Allocator;
 
-      constexpr basic_json_node() noexcept;
+      constexpr basic_json_node() noexcept(is_nothrow_default_constructible_v<Allocator>)
+        requires default_initializable<Allocator>;
+      constexpr explicit basic_json_node(const Allocator& a) noexcept;
     };
+
+  template<class Number, class Integer, class UInteger, class Allocator, class Allocator2>
+    struct uses_allocator<basic_json_node<Number, Integer, UInteger, Allocator>, Allocator2> :
+      false_type {};
 }
 ```
 
@@ -358,11 +400,22 @@ namespace std {
     If the node is in the string, array, or object state, an object of the type corresponding to the state is dynamically allocated, and a pointer to it is stored with the node.
     [*Note*: A single node type can refer to string, dynamic array, or map of different types.  -- *end note*]
 
+4. [*Note*: The `uses_allocator` partial specialization indicates that `basic_json_node` should not be uses-allocator constructed. -- *end note*]
+
+#### Construction
+
 ```cpp
-constexpr basic_json_node() noexcept;
+constexpr basic_json_node() noexcept(is_nothrow_default_constructible_v<Allocator>)
+  requires default_initializable<Allocator>;
 ```
 
-4. *Effects*: Initializes the node to the empty state. Default-initializes the stored allocator.
+1. *Effects*: Initializes the node to the empty state. Value-initializes the stored allocator.
+
+```cpp
+constexpr explicit basic_json_node(const Allocator& a) noexcept;
+```
+
+2. *Effects*: Initializes the node to the empty state. Copy-constructs the stored allocator from `a`.
 
 ### Class template `basic_json`
 
@@ -390,28 +443,46 @@ namespace std {
       using key_string_type = object_type::key_type;
       using key_char_type   = key_string_type::value_type;
 
-      constexpr basic_json() noexcept = default;
+      constexpr basic_json() requires default_initializable<allocator_type> = default;
+      constexpr explicit basic_json(const allocator_type& a) noexcept : <i>node_</i>(a) {}
       constexpr basic_json(const basic_json& rhs);
       constexpr basic_json(basic_json&& rhs) noexcept;
       constexpr basic_json& operator=(const basic_json& rhs);
-      constexpr basic_json& operator=(basic_json&& rhs) noexcept;
+      constexpr basic_json& operator=(basic_json&& rhs)
+        noexcept(allocator_traits<Allocator>::propagate_on_container_move_assignment::value ||
+                allocator_traits<Allocator>::is_always_equal::value);
       constexpr ~basic_json();
-      constexpr void swap(basic_json& rhs) noexcept;
-      friend constexpr void swap(basic_json& lhs, basic_json& rhs) noexcept;
+      constexpr void swap(basic_json& rhs)
+        noexcept(allocator_traits<Allocator>::propagate_on_container_swap::value ||
+                 allocator_traits<Allocator>::is_always_equal::value);
+      friend constexpr void swap(basic_json& lhs, basic_json& rhs)
+        noexcept(noexcept(lhs.swap(rhs)));
 
-      constexpr basic_json(nulljson_t) noexcept;
+      constexpr basic_json(const basic_json& rhs, const allocator_type& a);
+      constexpr basic_json(basic_json&& rhs, const allocator_type& a)
+        noexcept(allocator_traits<Allocator>::is_always_equal::value);
+
+      constexpr basic_json(nulljson_t, const allocator_type& a = allocator_type()) noexcept;
       template&lt;class T>
-        constexpr basic_json(T n) noexcept;
-      constexpr explicit basic_json(string_type v);
-      constexpr basic_json(const char_type* first, const char_type* last);
-      constexpr basic_json(const char_type* str, string_type::size_type count);
-      constexpr explicit basic_json(const char_type* str);
+        constexpr basic_json(T n, const allocator_type& a = allocator_type()) noexcept;
+      constexpr explicit basic_json(string_type v, const allocator_type& a = allocator_type());
+      constexpr basic_json(const char_type* first, const char_type* last,
+                           const allocator_type& a = allocator_type());
+      constexpr basic_json(const char_type* str, string_type::size_type count,
+                           const allocator_type& a = allocator_type());
+      constexpr explicit basic_json(const char_type* str,
+                                    const allocator_type& a = allocator_type());
       template&lt;class StrLike>
-        constexpr basic_json(const StrLike& str);
-      constexpr explicit basic_json(array_type arr);
-      constexpr explicit basic_json(object_type obj);
+        constexpr basic_json(const StrLike& str, const allocator_type& a = allocator_type());
+      constexpr explicit basic_json(array_type arr,
+                                    const allocator_type& a = allocator_type());
+      constexpr explicit basic_json(object_type obj,
+                                    const allocator_type& a = allocator_type());
       constexpr explicit basic_json(node_type&& n) noexcept;
-      basic_json(nullptr_t) = delete;
+      constexpr explicit basic_json(node_type&& n, const allocator_type& a) noexcept;
+      basic_json(nullptr_t, const allocator_type& = allocator_type()) = delete;
+
+      constexpr allocator_type get_allocator() const noexcept;
 
       constexpr operator node_type() && noexcept;
       constexpr slice_type slice() noexcept;
@@ -438,107 +509,133 @@ namespace std {
     - *qualified-id* `Array::value_type` is valid and denotes the same type as `Node`.
     - *qualified-id* `Object::mapped_type` is valid and denotes the same type as `Node`.
 
-#### Construction and swap
+<h5 id=construction-and-swap-basic-json>Construction and swap</h4>
+
+1. Every constructor taking a `const allocator_type&` parameter constructs <i>`node_`</i> from that parameter.
+
+2. Every constructor or assignment operator taking a `basic_json&&` parameter leaves the argument in a valid but unspecified state after construction or assignment.
+    Except for the move constructor, each of these functions reuse the dynamic storage of the argument if and only if
+    there is some dynamic storage allocated and the stored allocator in the <i>`node_`</i> is equal to that of the argument.
+
+3. The copy constructors, move constructor, copy assignment operator, move assignment operator, and `swap` functions propagate the allocator value as specified in [container.alloc.reqmts].
 
 ```cpp
-constexpr basic_json(nulljson_t) noexcept;
+constexpr basic_json(nulljson_t, const allocator_type& a = allocator_type()) noexcept;
 ```
 
-1. *Effects*: Sets <i>`node_`</i> to the null state.
+4. *Effects*: Sets <i>`node_`</i> to the null state.
 
 ```cpp
 template<class T>
-  constexpr basic_json(T n) noexcept;
+  constexpr basic_json(T n, const allocator_type& a = allocator_type()) noexcept;
 ```
 
-2. *Constraints*: `is_arithmetic_v<T>` is `true`.
+5. *Constraints*: `is_arithmetic_v<T>` is `true`.
 
-3. *Effects*:
+6. *Effects*:
     - If `T` is `bool`, sets <i>`node_`</i> to the true or the false state if `n` is `true` or `false`, respectively.
     - Otherwise, if `signed_integral<T>` and `has_integer` are both `true`, sets <i>`node_`</i> to the signed integral state and stores `n`.
     - Otherwise, if `unsigned_integral<T>` and `has_uinteger` are both `true`, sets <i>`node_`</i> to the unsigned integral state and stores `n`.
     - Otherwise, sets <i>`node_`</i> to the floating-point state and stores `static_cast<number_type>(n)`.
 
 ```cpp
-constexpr explicit basic_json(string_type v);
+constexpr explicit basic_json(string_type v, const allocator_type& a = allocator_type());
 ```
 
-4. *Effects*: Sets <i>`node_`</i> to the string state and stores a string constructed from `std::move(v)`.
-
-5. *Throws*: The exception thrown on allocation failure, or the exception thrown in the failed construction of the `String`.
-
-```cpp
-constexpr basic_json(const char_type* first, const char_type* last);
-```
-
-6. *Preconditions*: [`first`, `last`) is a valid range.
-
-7. *Effects*: Sets <i>`node_`</i> to the string state and stores a string containing characters in [`first`, `last`).
+7. *Effects*: Sets <i>`node_`</i> to the string state and stores a string constructed from `std::move(v)`.
 
 8. *Throws*: The exception thrown on allocation failure, or the exception thrown in the failed construction of the `String`.
 
 ```cpp
-constexpr basic_json(const char_type* str, string_type::size_type count);
+constexpr basic_json(const char_type* first, const char_type* last, const allocator_type& a = allocator_type());
 ```
 
-9. *Preconditions*: [`str`, `str + count`) is a valid range.
+9. *Preconditions*: [`first`, `last`) is a valid range.
 
-10. *Effects*: Sets <i>`node_`</i> to the string state and stores a string containing characters in [`str`, `str + count`).
+10. *Effects*: Sets <i>`node_`</i> to the string state and stores a string containing characters in [`first`, `last`).
 
 11. *Throws*: The exception thrown on allocation failure, or the exception thrown in the failed construction of the `String`.
 
 ```cpp
-constexpr explicit basic_json(const char_type* str);
+constexpr basic_json(const char_type* str, string_type::size_type count, const allocator_type& a = allocator_type());
 ```
 
-12. *Preconditions*: `str` points to a null-terminated `char_type` sequence.
+12. *Preconditions*: [`str`, `str + count`) is a valid range.
 
-13. *Effects*: Sets <i>`node_`</i> to the string state and stores a string containing characters in [`str`, `str + count`),
-    where `count` is the number of characters in the null-terminated sequence.
+13. *Effects*: Sets <i>`node_`</i> to the string state and stores a string containing characters in [`str`, `str + count`).
 
 14. *Throws*: The exception thrown on allocation failure, or the exception thrown in the failed construction of the `String`.
 
 ```cpp
-template<class StrLike>
-  constexpr basic_json(const StrLike& str);
+constexpr explicit basic_json(const char_type* str, const allocator_type& a = allocator_type());
 ```
 
-15. *Constraints*:
+15. *Preconditions*: `str` points to a null-terminated `char_type` sequence.
+
+16. *Effects*: Sets <i>`node_`</i> to the string state and stores a string containing characters in [`str`, `str + count`),
+    where `count` is the number of characters in the null-terminated sequence.
+
+17. *Throws*: The exception thrown on allocation failure, or the exception thrown in the failed construction of the `String`.
+
+```cpp
+template<class StrLike>
+  constexpr basic_json(const StrLike& str, const allocator_type& a = allocator_type());
+```
+
+18. *Constraints*:
     - `constructible_from<string_type, StrLike>` is `true`, and
     - `is_convertible_v<const KeyStrLike&, const key_char_type*>` is `false`.
 
-16. *Effects*: Sets <i>`node_`</i> to the string state and stores a string constructed from `str`.
+19. *Effects*: Sets <i>`node_`</i> to the string state and stores a string constructed from `str`.
 
-17. *Throws*: The exception thrown on allocation failure, or the exception thrown in by the construction of the `String`.
-
-```cpp
-constexpr explicit basic_json(array_type arr);
-```
-
-18. *Effects*: Sets <i>`node_`</i> to the array state and stores a dynamic array constructed from `std::move(arr)`.
-
-19. *Throws*: The exception thrown on allocation failure, or the exception thrown by the construction of the `Array`.
+20. *Throws*: The exception thrown on allocation failure, or the exception thrown in by the construction of the `String`.
 
 ```cpp
-constexpr explicit basic_json(object_type obj);
+constexpr explicit basic_json(array_type arr, const allocator_type& a = allocator_type());
 ```
 
-20. *Effects*: Sets <i>`node_`</i> to the object state and stores a map constructed from `std::move(obj)`.
+21. *Effects*: Sets <i>`node_`</i> to the array state and stores a dynamic array constructed from `std::move(arr)`.
 
-21. *Throws*: The exception thrown on allocation failure, or the exception thrown by the construction of the `Object`.
+22. *Throws*: The exception thrown on allocation failure, or the exception thrown by the construction of the `Array`.
+
+```cpp
+constexpr explicit basic_json(object_type obj, const allocator_type& a = allocator_type());
+```
+
+23. *Effects*: Sets <i>`node_`</i> to the object state and stores a map constructed from `std::move(obj)`.
+
+24. *Throws*: The exception thrown on allocation failure, or the exception thrown by the construction of the `Object`.
 
 ```cpp
 constexpr explicit basic_json(node_type&& n) noexcept;
 ```
 
-22. *Effects*: Initializes <i>`node_`</i> with `n` and then sets `n` to the empty state.
+25. *Effects*: Constructs <i>`node_`</i> from `std::move(n)` and sets `n` to the empty state.
+    The stored allocator in `n` is unchanged.
 
 ```cpp
-constexpr void swap(basic_json& rhs) noexcept;
-friend constexpr void swap(basic_json& lhs, basic_json& rhs) noexcept;
+constexpr explicit basic_json(node_type&& n, const allocator_type& a) noexcept;
 ```
 
-23. *Effects*: Swaps the values of the <i>`node_`</i> member of both `basic_json` objects.
+25. *Effects*: Constructs <i>`node_`</i> from `std::move(a)`, sets it to the same state as `n`, and then sets `n` to the empty state.
+    The stored allocator in `n` is unchanged.
+
+```cpp
+constexpr void swap(basic_json& rhs)
+  noexcept(allocator_traits<Allocator>::propagate_on_container_swap::value ||
+           allocator_traits<Allocator>::is_always_equal::value);
+friend constexpr void swap(basic_json& lhs, basic_json& rhs) noexcept(noexcept(lhs.swap(rhs)));
+```
+
+26. *Effects*: Swaps the values of the <i>`node_`</i> member of both `basic_json` objects.
+
+<h5 id=observers-basic-json>Observers</h5>
+
+```cpp
+constexpr allocator_type get_allocator() const noexcept;
+```
+
+1. *Returns*: The copy of the constructor stored in <i>`node_`</i>.
 
 #### Slicing
 
@@ -546,22 +643,24 @@ friend constexpr void swap(basic_json& lhs, basic_json& rhs) noexcept;
 constexpr operator node_type() && noexcept;
 ```
 
-1. *Effects*: Equivalent to <code>return exchange(<i>node_</i>, node_type{});</code>.
+1. *Effects*: Sets <i>`node_`</i> to the empty state. 
 
-2. *Recommended practice*: An implementation should emit a diagnostic message when the return value is discarded.<br>
+2. *Returns*: A `node_type` value holding the value of <i>`node_`</i> before modification.
+
+3. *Recommended practice*: An implementation should emit a diagnostic message when the return value is discarded.<br>
     [*Note*: Discarding the return value leaks memory if <i>`node_`</i> was originally in the string, array, or object state. -- *end note*]
 
 ```cpp
 constexpr slice_type slice() noexcept;
 ```
 
-3. *Effects*: Equivalent to `return slice_type(*this);`.
+4. *Effects*: Equivalent to `return slice_type(*this);`.
 
 ```cpp
 constexpr const_slice_type slice() const noexcept;
 ```
 
-4. *Effects*: Equivalent to `return const_slice_type(*this);`.
+5. *Effects*: Equivalent to `return const_slice_type(*this);`.
 
 ### Class template `basic_json_slice`
 
@@ -646,6 +745,12 @@ namespace std {
     private:
       node_type* <i>node_</i> = nullptr;    // exposition only
     };
+
+  template&lt;class Node, class String, class Array, class Object,
+           bool HasInteger, bool HasUInteger, class Allocator>
+    struct uses_allocator&lt;basic_json_slice&lt;Node, String, Array, Object,
+                                              HasInteger, HasUInteger>, Allocator2> :
+      false_type {};
 }
 </pre>
 
@@ -654,9 +759,13 @@ namespace std {
 2. A `basic_json_slice` is considered valid if its <i>`node_`</i> member points to a `node_type` object within its lifetime.<br>
     [*Note*: A default-constructed `basic_json_slice` is not valid. -- *end note*]
 
-3. Whenever `basic_json_slice` is valid, its referenced node is the object denoted by <code>*<i>node_</i></code>.
+3. [*Note*: The default constructor of `basic_json_slice` is intentionally used for default arguments. -- *end note*]
 
-#### Construction and swap
+4. Whenever `basic_json_slice` is valid, its referenced node is the object denoted by <code>*<i>node_</i></code>.
+
+5. [*Note*: The `uses_allocator` partial specialization indicates that `basic_json_slice` should not be uses-allocator constructed. -- *end note*]
+
+<h5 id=construction-and-swap-basic-json-slice>Construction and swap</h4>
 
 ```cpp
 constexpr basic_json_slice(json_type& j) noexcept;
@@ -691,7 +800,7 @@ constexpr basic_json_slice& operator=(node_type& n) noexcept;
 
 2. *Effects*: Equivalent to `return *this = basic_json_slice{n};`.
 
-#### Observers
+<h5 id=observers-basic-json-slice>Observers</h5>
 
 <pre highlight="c++">
 constexpr bool empty() const noexcept;
@@ -725,7 +834,7 @@ constexpr basic_const_json_slice operator[](const key_char_type* ks) const;
 #### Modifiers
 
 1. A modifier function of `basic_json_slice` may change the state of the referenced node, but only if the node was in the empty state.
-    A `runtime_error` exception is thrown if one attempts to change the established non-empty state of the node.
+    A `json_error` exception is thrown if one attempts to change the established non-empty state of the node.
 
 ```cpp
 constexpr basic_json_slice& operator=(nulljson_t);
@@ -739,7 +848,7 @@ constexpr basic_json_slice& operator=(nulljson_t);
 
 4. *Returns*: `*this`.
 
-5. *Throws*: A `runtime_error` exception if the referenced node is not in the empty or the null state.
+5. *Throws*: A `json_error` exception constructed from `json_errc::not_empty_or_null` if the referenced node is not in the empty or the null state.
 
 ```cpp
 template<class T>
@@ -762,7 +871,7 @@ template<class T>
     - Otherwise, if `HasUInteger` and `unsigned_integral<T>` are both `true` and the referenced node is in the unsigned integral state,
         replaces the stored unsigned integer value with `n`.
     - Otherwise, the referenced node is in the floating-point state, replaces the stored floating-point value with `static_cast<number_type>(n)`.
-    - Otherwise, throws a `runtime_error` exception.
+    - Otherwise, throws a `json_error` exception constructed from `json_errc::not_empty_or_number`;
 
 9. *Returns*: `*this`.
 
@@ -778,8 +887,9 @@ constexpr basic_json_slice& operator=(const string_type& str);
 
 12. *Returns*: `*this`.
 
-13. *Throws*: A `runtime_error` exception if the referenced node is not in the empty or the string state.
-    Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
+13. *Throws*:
+    - A `json_error` exception constructed from `json_errc::not_empty_or_string` if the referenced node is not in the empty or the string state.
+    - Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
 
 ```cpp
 constexpr basic_json_slice& operator=(string_type&& str);
@@ -793,8 +903,9 @@ constexpr basic_json_slice& operator=(string_type&& str);
 
 16. *Returns*: `*this`.
 
-17. *Throws*: A `runtime_error` exception if the referenced node is not in the empty or the string state.
-    Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
+17. *Throws*:
+    - A `json_error` exception constructed from `json_errc::not_empty_or_string` if the referenced node is not in the empty or the string state.
+    - Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
 
 ```cpp
 constexpr basic_json_slice& operator=(const char_type* str);
@@ -804,13 +915,14 @@ constexpr basic_json_slice& operator=(const char_type* str);
 
 19. *Effects*:
     - If the referenced node is in the empty state, sets it to the string state and stores a string containing characters from `str` until `str + count`,
-	    where `count` is the number of characters in the null-terminated sequence.
+        where `count` is the number of characters in the null-terminated sequence.
     - Otherwise, if the referenced node is in the string state, replaces the contents of `str` with that of the null-terminated sequence.
 
 20. *Returns*: `*this`.
 
-21. *Throws*: A `runtime_error` exception if the referenced node is not in the empty or the string state.
-    Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
+21. *Throws*:
+    - A `json_error` exception constructed from `json_errc::not_empty_or_string` if the referenced node is not in the empty or the string state.
+    - Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
 
 ```cpp
 template<class StrLike>
@@ -829,8 +941,9 @@ template<class StrLike>
 
 25. *Returns*: `*this`.
 
-26. *Throws*: A `runtime_error` exception if the referenced node is not in the empty or the string state.
-    Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
+26. *Throws*:
+    - A `json_error` exception constructed from `json_errc::not_empty_or_string` if the referenced node is not in the empty or the string state.
+    - Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
 
 ```cpp
 constexpr basic_json_slice operator[](array_type::size_type pos);
@@ -840,7 +953,7 @@ constexpr basic_json_slice operator[](array_type::size_type pos);
 
 28. *Returns*: A `basic_json_slice` referencing the node at offset `pos` of the stored dynamic array if the referenced node is in the array state.
 
-29. *Throws*: A `runtime_error` exception if the referenced node is not in the array state.
+29. *Throws*: A `json_error` exception constructed from `json_errc::nonarray_indexing` if the referenced node is not in the array state.
 
 ```cpp
 constexpr basic_json_slice operator[](const key_string_type& k);
@@ -867,8 +980,9 @@ constexpr basic_json_slice operator[](const key_char_type* ks);
         a `basic_json_slice` referencing the mapped value of that element.
     - Otherwise, if a new element `e` is inserted, a `basic_json_slice`, a `basic_json_slice` the mapped value of the inserted element.
 
-35. *Throws*: A `runtime_error` exception the referenced node is not in the object state.
-    Otherwise, the exception thrown when looking up the key, or by the allocation or construction of the inserted map element.
+35. *Throws*:
+    - A `json_error` exception constructed from `json_errc::nonobject_indexing` the referenced node is not in the object state.
+    - Otherwise, the exception thrown when looking up the key, or by the allocation or construction of the inserted map element.
 
 ### Class template `basic_const_json_slice`
 
@@ -908,7 +1022,8 @@ namespace std {
       constexpr basic_const_json_slice(const node_type& n) noexcept;
       constexpr basic_const_json_slice(const slice_type& s) noexcept;
       constexpr void swap(basic_const_json_slice& rhs) noexcept;
-      friend constexpr void swap(basic_const_json_slice& lhs, basic_const_json_slice& rhs) noexcept;
+      friend constexpr void swap(basic_const_json_slice& lhs,
+                                 basic_const_json_slice& rhs) noexcept;
 
       constexpr bool empty() const noexcept;
       constexpr bool string() const noexcept;
@@ -937,6 +1052,12 @@ namespace std {
     private:
       const node_type* <i>node_</i> = nullptr;  // exposition only
     };
+
+  template&lt;class Node, class String, class Array, class Object,
+           bool HasInteger, bool HasUInteger, class Allocator>
+    struct uses_allocator&lt;basic_const_json_slice&lt;Node, String, Array, Object,
+                                                    HasInteger, HasUInteger>, Allocator2> :
+      false_type {};
 }
 </pre>
 
@@ -945,9 +1066,13 @@ namespace std {
 2. A `basic_const_json_slice` is considered valid if its <i>`node_`</i> member points to a `node_type` object within its lifetime.<br>
     [*Note*: A default-constructed `basic_const_json_slice` is not valid. -- *end note*]
 
-3. Whenever `basic_const_json_slice` is valid, its referenced node is the object denoted by <code>*<i>node_</i></code>.
+3. [*Note*: The default constructor of `basic_const_json_slice` is intentionally used for default arguments. -- *end note*]
 
-#### Construction and swap
+4. Whenever `basic_const_json_slice` is valid, its referenced node is the object denoted by <code>*<i>node_</i></code>.
+
+5. [*Note*: The `uses_allocator` partial specialization indicates that `basic_const_json_slice` should not be uses-allocator constructed. -- *end note*]
+
+<h5 id=construction-and-swap-basic-const-json-slice>Construction and swap</h4>
 
 ```cpp
 constexpr basic_const_json_slice(const json_type& j) noexcept;
@@ -970,12 +1095,13 @@ constexpr basic_const_json_slice(const slice_type& s) noexcept;
 
 ```cpp
 constexpr void swap(basic_const_json_slice& rhs) noexcept;
-friend constexpr void swap(basic_const_json_slice& lhs, basic_const_json_slice& rhs) noexcept;
+friend constexpr void swap(basic_const_json_slice& lhs,
+                           basic_const_json_slice& rhs) noexcept;
 ```
 
 4. *Effects*: Swaps the values of the <i>`node_`</i> member of both `basic_const_json_slice` objects.
 
-#### Observers
+<h5 id=observers-basic-const-json-slice>Observers</h5>
 
 ```cpp
 constexpr bool empty() const noexcept;
@@ -1061,7 +1187,7 @@ constexpr explicit operator bool() const;
 
 22. *Returns*: `true` if the referenced node is in the true state, `false` if the referenced node is in the false state.
 
-23. *Throws*: A `runtime_error` exception if the referenced node is not in the true or the false state.
+23. *Throws*: A `json_error` exception constructed from `json_errc::not_boolean` if the referenced node is not in the true or the false state.
 
 ```cpp
 constexpr explicit operator number_type() const;
@@ -1071,7 +1197,7 @@ constexpr explicit operator number_type() const;
 
 25. *Returns*: The stored numeric value converted to `number_type` if the referenced node is in the floating-point, the signed integral, or the unsigned integral state.
 
-26. *Throws*: A `runtime_error` exception if the referenced node is not in the floating-point, the signed integral, or the unsigned integral state.
+26. *Throws*: A `json_error` exception constructed from `json_errc::not_number` if the referenced node is not in the floating-point, the signed integral, or the unsigned integral state.
 
 ```cpp
 constexpr explicit operator nulljson_t() const;
@@ -1081,7 +1207,7 @@ constexpr explicit operator nulljson_t() const;
 
 28. *Returns*: `nulljson_t{}` if the referenced node is in the null state.
 
-29. *Throws*: A `runtime_error` exception if the referenced node is not in the null state.
+29. *Throws*: A `json_error` exception constructed from `json_errc::not_null` if the referenced node is not in the null state.
 
 ```cpp
 constexpr explicit operator const string_type&() const&;
@@ -1091,7 +1217,7 @@ constexpr explicit operator const string_type&() const&;
 
 31. *Returns*: The reference to the stored string if the referenced node is in the string state.
 
-32. *Throws*: A `runtime_error` exception if the referenced node is not in the string state.
+32. *Throws*: A `json_error` exception constructed from `json_errc::not_string` if the referenced node is not in the string state.
 
 ```cpp
 constexpr explicit operator const array_type&() const&;
@@ -1101,7 +1227,7 @@ constexpr explicit operator const array_type&() const&;
 
 34. *Returns*: The reference to the stored dynamic array if the referenced node is in the array state.
 
-35. *Throws*: A `runtime_error` exception if the referenced node is not in the array state.
+35. *Throws*: A `json_error` exception constructed from `json_errc::not_array` if the referenced node is not in the array state.
 
 ```cpp
 constexpr explicit operator const object_type&() const&;
@@ -1111,7 +1237,7 @@ constexpr explicit operator const object_type&() const&;
 
 37. *Returns*: The reference to the stored map if the referenced node is in the object state.
 
-38. *Throws*: A `runtime_error` exception if the referenced node is not in the object state.
+38. *Throws*: A `json_error` exception constructed from `json_errc::not_object` if the referenced node is not in the object state.
 
 ```cpp
 constexpr explicit operator integer_type() const;
@@ -1123,7 +1249,7 @@ constexpr explicit operator integer_type() const;
 
 41. *Returns*: The stored integer value if the referenced node is in the signed integral state.
 
-42. *Throws*: A `runtime_error` exception if the referenced node is not in the signed integral state.
+42. *Throws*: A `json_error` exception constructed from `json_errc::not_integer` if the referenced node is not in the signed integral state.
 
 ```cpp
 constexpr explicit operator uinteger_type() const;
@@ -1135,7 +1261,7 @@ constexpr explicit operator uinteger_type() const;
 
 45. *Returns*: The stored integer value if the referenced node is in the unsigned integral state.
 
-46. *Throws*: A `runtime_error` exception if the referenced node is not in the unsigned integral state.
+46. *Throws*: A `json_error` exception constructed from `json_errc::not_uinteger` if the referenced node is not in the unsigned integral state.
 
 ```cpp
 constexpr basic_const_json_slice operator[](array_type::size_type pos) const;
@@ -1145,7 +1271,7 @@ constexpr basic_const_json_slice operator[](array_type::size_type pos) const;
 
 48. *Returns*: A `basic_const_json_slice` referencing the node at offset `pos` of the stored dynamic array if the referenced node is in the array state.
 
-49. *Throws*: A `runtime_error` exception if the referenced node is not in the array state.
+49. *Throws*: A `json_error` exception constructed from `json_errc::nonarray_indexing` if the referenced node is not in the array state.
 
 ```cpp
 constexpr basic_const_json_slice operator[](const key_string_type& k) const;
@@ -1167,8 +1293,62 @@ constexpr basic_const_json_slice operator[](const key_char_type* ks) const;
 53. *Returns*: If the referenced node is in the object state and an element with key `k` is found in the stored map,
     a `basic_const_json_slice` referencing the mapped value of that element.
 
-54. *Throws*: A `runtime_error` exception if the referenced node is not in the object state or no element with key `k` is found,
-    or the exception thrown when looking up the key.
+54. *Throws*:
+    - A `json_error` exception constructed from `json_errc::nonobject_indexing` if the referenced node is not in the object state.
+    - Otherwise, the exception thrown when looking up the key or `json_error` exception constructed from `json_errc::key_not_found` if no element with key `k` is found.
+
+### Error code enumeration `json_errc`
+
+<pre highlight="c++">
+namespace std {
+  enum class json_errc : <i>unspecified</i> {
+    // invalid access
+    not_null            = <i>see below</i>,
+    not_boolean         = <i>see below</i>,
+    not_number          = <i>see below</i>,
+    not_integer         = <i>see below</i>,
+    not_uinteger        = <i>see below</i>,
+    not_string          = <i>see below</i>,
+    not_array           = <i>see below</i>,
+    not_object          = <i>see below</i>,
+    nonarray_indexing   = <i>see below</i>,
+    nonobject_indexing  = <i>see below</i>,
+    key_not_found       = <i>see below</i>,
+
+    // invalid modification
+    not_empty_or_null   = <i>see below</i>,
+    not_empty_or_number = <i>see below</i>,
+    not_empty_or_string = <i>see below</i>,
+  };
+}
+</pre>
+
+1. The enumeration type `json_errc` is used for reporting JSON-related errors.
+
+2. The underlying type of `json_errc` is at least as wide as `int`. Each enumerator specified above has a distinct, nonzero value.
+
+### Class `json_error`
+
+<pre highlight="c++">
+namespace std {
+  class json_error : public runtime_error {
+  public:
+    json_error(json_errc ec);
+    json_errc code() const noexcept { return <i>code_</i>; }
+
+  private:
+    json_errc <i>code_</i>;
+  };
+}
+</pre>
+
+1. The class `format_error` defines the exception type that reports errors from the JSON-related operations.
+
+```cpp
+json_error(json_errc ec);
+```
+
+2. *Postconditions*: <code><i>code_</i> == ec</code>.
 
 ## Feature-test macro
 
