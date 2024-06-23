@@ -545,8 +545,9 @@ namespace bizwen
 			lhs.swap(rhs);
 		}
 
-		// similar to iterators, default construction is allowed, but except for operator=,
+		// Similar to iterators, default construction is allowed, but except for operator=,
 		// operations on default-constructed slice cause undefined behavior.
+		// The default constructor is intentionally provided for default arguments.
 		constexpr basic_const_json_slice() noexcept = default;
 
 		constexpr basic_const_json_slice(basic_const_json_slice&&) noexcept = default;
@@ -747,8 +748,9 @@ namespace bizwen
 			lhs.swap(rhs);
 		}
 
-		// similar to iterators, default construction is allowed, but except for operator=,
+		// Similar to iterators, default construction is allowed, but except for operator=,
 		// operations on default-constructed slice cause undefined behavior.
+		// The default constructor is intentionally provided for default arguments.
 		constexpr basic_json_slice() noexcept = default;
 
 		constexpr basic_json_slice(basic_json_slice&&) noexcept = default;

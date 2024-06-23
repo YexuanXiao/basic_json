@@ -141,7 +141,7 @@ and then insert them into the container, finally, move `a` or `m` to the constru
 
 `basic_json_slice` and `basic_const_json_slice` are trivially copyable, so copying a slice has low overhead. No operation on a slice produces a copy of the `basic_json` object. For subscript operations, a new `basic_json_slice` or `basic_const_json_slice` is returned.
 
-A default-constructed slice holds a null pointer, and thus all operations that need to queries or modifies the node results in undefined behavior on such a slice.
+A default-constructed slice holds a null pointer, and thus all operations that need to queries or modifies the node results in undefined behavior on such a slice. The default-constructibility of slices is mainly used for default arguments.
 
 ## Summary
 
@@ -757,9 +757,11 @@ namespace std {
 2. A `basic_json_slice` is considered valid if its <i>`node_`</i> member points to a `node_type` object within its lifetime.<br>
     [*Note*: A default-constructed `basic_json_slice` is not valid. -- *end note*]
 
-3. Whenever `basic_json_slice` is valid, its referenced node is the object denoted by <code>*<i>node_</i></code>.
+3. [*Note*: The default constructor of `basic_json_slice` is intentionally used for default arguments. -- *end note*]
 
-4. [*Note*: The `uses_allocator` partial specialization indicates that `basic_json_slice` should not be uses-allocator constructed. -- *end note*]
+4. Whenever `basic_json_slice` is valid, its referenced node is the object denoted by <code>*<i>node_</i></code>.
+
+5. [*Note*: The `uses_allocator` partial specialization indicates that `basic_json_slice` should not be uses-allocator constructed. -- *end note*]
 
 #### Construction and swap
 
@@ -1062,9 +1064,11 @@ namespace std {
 2. A `basic_const_json_slice` is considered valid if its <i>`node_`</i> member points to a `node_type` object within its lifetime.<br>
     [*Note*: A default-constructed `basic_const_json_slice` is not valid. -- *end note*]
 
-3. Whenever `basic_const_json_slice` is valid, its referenced node is the object denoted by <code>*<i>node_</i></code>.
+3. [*Note*: The default constructor of `basic_const_json_slice` is intentionally used for default arguments. -- *end note*]
 
-4. [*Note*: The `uses_allocator` partial specialization indicates that `basic_const_json_slice` should not be uses-allocator constructed. -- *end note*]
+4. Whenever `basic_const_json_slice` is valid, its referenced node is the object denoted by <code>*<i>node_</i></code>.
+
+5. [*Note*: The `uses_allocator` partial specialization indicates that `basic_const_json_slice` should not be uses-allocator constructed. -- *end note*]
 
 #### Construction and swap
 
