@@ -266,9 +266,11 @@ int main()
 }
 ```
 
-# Proposal
+# Library wording
 
-## Wording
+## JSON processing
+
+[*Drafting note:* Add this subclause to [utilities]. -- *end drafting note*]
 
 ### Header `<json>` synopsis
 
@@ -507,7 +509,7 @@ namespace std {
     - *qualified-id* `Array::value_type` is valid and denotes the same type as `Node`.
     - *qualified-id* `Object::mapped_type` is valid and denotes the same type as `Node`.
 
-#### Construction and swap
+<h5 id=construction-and-swap-basic-json>Construction and swap</h4>
 
 1. Every constructor taking a `const allocator_type&` parameter constructs <i>`node_`</i> from that parameter.
 
@@ -627,7 +629,7 @@ friend constexpr void swap(basic_json& lhs, basic_json& rhs) noexcept(noexcept(l
 
 26. *Effects*: Swaps the values of the <i>`node_`</i> member of both `basic_json` objects.
 
-#### Observers
+<h5 id=observers-basic-json>Observers</h5>
 
 ```cpp
 constexpr allocator_type get_allocator() const noexcept;
@@ -763,7 +765,7 @@ namespace std {
 
 5. [*Note*: The `uses_allocator` partial specialization indicates that `basic_json_slice` should not be uses-allocator constructed. -- *end note*]
 
-#### Construction and swap
+<h5 id=construction-and-swap-basic-json-slice>Construction and swap</h4>
 
 ```cpp
 constexpr basic_json_slice(json_type& j) noexcept;
@@ -798,7 +800,7 @@ constexpr basic_json_slice& operator=(node_type& n) noexcept;
 
 2. *Effects*: Equivalent to `return *this = basic_json_slice{n};`.
 
-#### Observers
+<h5 id=observers-basic-json-slice>Observers</h5>
 
 <pre highlight="c++">
 constexpr bool empty() const noexcept;
@@ -1070,7 +1072,7 @@ namespace std {
 
 5. [*Note*: The `uses_allocator` partial specialization indicates that `basic_const_json_slice` should not be uses-allocator constructed. -- *end note*]
 
-#### Construction and swap
+<h5 id=construction-and-swap-basic-const-json-slice>Construction and swap</h4>
 
 ```cpp
 constexpr basic_const_json_slice(const json_type& j) noexcept;
@@ -1099,7 +1101,7 @@ friend constexpr void swap(basic_const_json_slice& lhs,
 
 4. *Effects*: Swaps the values of the <i>`node_`</i> member of both `basic_const_json_slice` objects.
 
-#### Observers
+<h5 id=observers-basic-const-json-slice>Observers</h5>
 
 ```cpp
 constexpr bool empty() const noexcept;
