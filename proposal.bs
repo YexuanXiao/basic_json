@@ -1303,59 +1303,29 @@ constexpr basic_const_json_slice operator[](const key_char_type* ks) const;
 namespace std {
   enum class json_errc : <i>unspecified</i> {
     // invalid access
-    is_empty = 1,
-    not_null,
-    not_boolean,
-    not_number,
-    not_integer,
-    not_uinteger,
-    not_string,
-    not_array,
-    not_object,
-    nonarray_indexing,
-    nonobject_indexing,
-    key_not_found,
+    not_null            = <i>see below</i>,
+    not_boolean         = <i>see below</i>,
+    not_number          = <i>see below</i>,
+    not_integer         = <i>see below</i>,
+    not_uinteger        = <i>see below</i>,
+    not_string          = <i>see below</i>,
+    not_array           = <i>see below</i>,
+    not_object          = <i>see below</i>,
+    nonarray_indexing   = <i>see below</i>,
+    nonobject_indexing  = <i>see below</i>,
+    key_not_found       = <i>see below</i>,
 
     // invalid modification
-    not_empty_or_null,
-    not_empty_or_boolean,
-    not_empty_or_number,
-    not_empty_or_integer,
-    not_empty_or_uinteger,
-    not_empty_or_string,
-    not_empty_or_array,
-    not_empty_or_object,
-
-    // deserialization failures
-    unsupported_option,
-    unexpect_token,
-    unexpect_comment,
-    unexpect_undefined,
-    missing_square_bracket,
-    missing_brace,
-    missing_double_quote,
-    number_overflow,
-    number_underflow,
-    integer_overflow,
-    integer_underflow,
-    uinteger_overflow,
-    illegal_character,
-    too_deep,
-    too_large,
-
-    // serialization failures
-    unexpect_empty,
-    number_nan,
-    number_inf,
-
-    // reflection failures
-    unexpect_null,
-    unexpect_type,
+    not_empty_or_null   = <i>see below</i>,
+    not_empty_or_number = <i>see below</i>,
+    not_empty_or_string = <i>see below</i>,
   };
 }
 </pre>
 
 1. The enumeration type `json_errc` is used for reporting JSON-related errors.
+
+2. The underlying type of `json_errc` is at least as wide as `int`. Each enumerator specified above has a distinct, nonzero value.
 
 ### Class `json_error`
 
