@@ -2,6 +2,7 @@
 Title: A Minimal JSON Support Library for C++
 Abstract: This paper proposes a minimal JSON support library for C++, which provides a simple and efficient way to represent and manipulate JSON data. The library consists of four main components: a `basic_json` class that represents a JSON value, a `basic_json_node` class that provide a type-erased JSON storage, and two slice classes that provides access and modification operations to the JSON class. The library aims to be compatible with the existing C++ standard library, and provides strong extension support.
 Editor: Yexuan Xiao, bizwen@nykz.org
+Editor: F.v.S
 Shortname: ????
 Revision: 0
 Status: D
