@@ -25,6 +25,9 @@ namespace bizwen
 
 	inline constexpr nulljson_t nulljson{};
 
+	// https://cplusplus.github.io/LWG/issue3917
+	// since the types of string, array and map are unknown at this point,
+	// memory allocation can only be done by instantiating char.
 	template <typename Number = double,
 	    typename Integer = long long, typename UInteger = unsigned long long, typename Allocator = std::allocator<char>>
 	class basic_json_node;
@@ -81,6 +84,7 @@ namespace bizwen
 		nonobject_indexing,
 		key_not_found,
 		// for modifier
+		is_empty,
 		not_undefined_or_null,
 		not_undefined_or_boolean,
 		not_undefined_or_number,
@@ -160,7 +164,7 @@ namespace bizwen
 			case json_errc::not_undefined_or_string:
 				return "JSON error: current value is not undefined or not a string.";
 			default:
-				return "JSON error: unexpected error.";
+				return "JSON error: unspecified error.";
 			}
 		}
 
@@ -168,9 +172,6 @@ namespace bizwen
 		json_errc code_;
 	};
 
-	// https://cplusplus.github.io/LWG/issue3917
-	// since the types of string, array and map are unknown at this point,
-	// memory allocation can only be done by instantiating char.
 	template <typename Number,
 	    typename Integer, typename UInteger, typename Allocator>
 	class basic_json_node: protected Allocator
@@ -334,9 +335,12 @@ namespace bizwen
 
 			friend json_type;
 
-			constexpr kind_t kind() const noexcept
+			constexpr kind_t kind() const
 			{
-				assert(node_);
+				// assert(node_);
+				// Lakos rule
+				if (!node_)
+					throw json_error(json_errc::is_empty);
 
 				return node_->kind_;
 			}
