@@ -2,7 +2,7 @@
 Title: A Minimal JSON Support Library for C++
 Abstract: This paper proposes a minimal JSON support library for C++, which provides a simple and efficient way to represent and manipulate JSON data. The library consists of four main components: a `basic_json` class that represents a JSON value, a `basic_json_node` class that provide a type-erased JSON storage, and two slice classes that provides access and modification operations to the JSON class. The library aims to be compatible with the existing C++ standard library, and provides strong extension support.
 Editor: Yexuan Xiao, bizwen@nykz.org
-Editor: F.v.S
+Editor: An Jiang, fvsja-cpp@outlook.com
 Shortname: ????
 Revision: 0
 Status: D
@@ -206,6 +206,7 @@ int main()
 	using const_slice = bizwen::const_json_slice;
 	const_slice c1;
 	c1.empty();
+	c1.undefined();
 	c1.array();
 	c1.string();
 	c1.null();
@@ -264,6 +265,7 @@ int main()
 	s2 = 1ull;
 	s2 = n;
 	s2["key"] = 1;
+	s2.clear();
 }
 ```
 
@@ -337,7 +339,7 @@ namespace std {
 ### General
 
 1. A `basic_json_node` object is a JSON node. A valid node object is always in one of the following states:
-    empty, null, true, false, floating-point, signed integral, unsigned integral, string, array, and object.
+    undefined, null, true, false, floating-point, signed integral, unsigned integral, string, array, and object.
 
 2. Some operations of `basic_json` and `basic_json_slice` dynamically allocate memory.
     This happens if and only if the `basic_json_node` held by `basic_json` or referenced by `basic_json_slice` is set to
@@ -410,13 +412,13 @@ constexpr basic_json_node() noexcept(is_nothrow_default_constructible_v<Allocato
   requires default_initializable<Allocator>;
 ```
 
-1. *Effects*: Initializes the node to the empty state. Value-initializes the stored allocator.
+1. *Effects*: Initializes the node to the undefined state. Value-initializes the stored allocator.
 
 ```cpp
 constexpr explicit basic_json_node(const Allocator& a) noexcept;
 ```
 
-2. *Effects*: Initializes the node to the empty state. Copy-constructs the stored allocator from `a`.
+2. *Effects*: Initializes the node to the undefined state. Copy-constructs the stored allocator from `a`.
 
 ### Class template `basic_json`
 
@@ -611,14 +613,14 @@ constexpr explicit basic_json(object_type obj, const allocator_type& a = allocat
 constexpr explicit basic_json(node_type&& n) noexcept;
 ```
 
-25. *Effects*: Constructs <i>`node_`</i> from `std::move(n)` and sets `n` to the empty state.
+25. *Effects*: Constructs <i>`node_`</i> from `std::move(n)` and sets `n` to the undefined state.
     The stored allocator in `n` is unchanged.
 
 ```cpp
 constexpr explicit basic_json(node_type&& n, const allocator_type& a) noexcept;
 ```
 
-25. *Effects*: Constructs <i>`node_`</i> from `std::move(a)`, sets it to the same state as `n`, and then sets `n` to the empty state.
+25. *Effects*: Constructs <i>`node_`</i> from `std::move(a)`, sets it to the same state as `n`, and then sets `n` to the undefined state.
     The stored allocator in `n` is unchanged.
 
 ```cpp
@@ -644,7 +646,7 @@ constexpr allocator_type get_allocator() const noexcept;
 constexpr operator node_type() && noexcept;
 ```
 
-1. *Effects*: Sets <i>`node_`</i> to the empty state. 
+1. *Effects*: Sets <i>`node_`</i> to the undefined state. 
 
 2. *Returns*: A `node_type` value holding the value of <i>`node_`</i> before modification.
 
@@ -706,6 +708,7 @@ namespace std {
       constexpr basic_json_slice& operator=(node_type& n) noexcept;
 
       constexpr bool empty() const noexcept;
+      constexpr bool undefined() const noexcept;
       constexpr bool string() const noexcept;
       constexpr bool null() const noexcept;
       constexpr bool boolean() const noexcept;
@@ -729,6 +732,7 @@ namespace std {
         constexpr basic_const_json_slice operator[](const KeyStrLike& k) const;
       constexpr basic_const_json_slice operator[](const key_char_type* ks) const;
 
+      constexpr void clear() noexcept;
       constexpr basic_json_slice& operator=(nulljson_t);
       template&lt;class T>
         constexpr basic_json_slice& operator=(T n);
@@ -805,6 +809,7 @@ constexpr basic_json_slice& operator=(node_type& n) noexcept;
 
 <pre highlight="c++">
 constexpr bool empty() const noexcept;
+constexpr bool undefined() const noexcept;
 constexpr bool string() const noexcept;
 constexpr bool null() const noexcept;
 constexpr bool boolean() const noexcept;
@@ -834,34 +839,42 @@ constexpr basic_const_json_slice operator[](const key_char_type* ks) const;
 
 #### Modifiers
 
-1. A modifier function of `basic_json_slice` may change the state of the referenced node, but only if the node was in the empty state.
-    A `json_error` exception is thrown if one attempts to change the established non-empty state of the node.
+1. Except for `clear`, a modifier function of `basic_json_slice` may change the state of the referenced node, but only if the node was in the undefined state.
+    A `json_error` exception is thrown if one attempts to change the established non-undefined state of the node.
+
+```cpp
+constexpr void clear() noexcept;
+```
+
+2. *Preconditions*: `*this` is valid.
+
+3. *Effects*: Sets the referenced node to the undefined state.
 
 ```cpp
 constexpr basic_json_slice& operator=(nulljson_t);
 ```
 
-2. *Preconditions*: `*this` is valid.
+4. *Preconditions*: `*this` is valid.
 
-3. *Effects*:
-    - If the referenced node is in the empty state, sets it to the null state.
+5. *Effects*:
+    - If the referenced node is in the undefined state, sets it to the null state.
     - Otherwise, if the referenced node is in the null state, does nothing.
 
-4. *Returns*: `*this`.
+6. *Returns*: `*this`.
 
-5. *Throws*: A `json_error` exception constructed from `json_errc::not_empty_or_null` if the referenced node is not in the empty or the null state.
+7. *Throws*: A `json_error` exception constructed from `json_errc::not_undefined_or_null` if the referenced node is not in the undefined or the null state.
 
 ```cpp
 template<class T>
   constexpr basic_json_slice& operator=(T n);
 ```
 
-6. *Constraints*: `is_arithmetic_v<T>` is `true`.
+8. *Constraints*: `is_arithmetic_v<T>` is `true`.
 
-7. *Preconditions*: `*this` is valid.
+9. *Preconditions*: `*this` is valid.
 
-8. *Effects*:
-    - If the referenced node is in the empty state, performs <code>*<i>node_</i> = json_type{n}</code>.
+10. *Effects*:
+    - If the referenced node is in the undefined state, performs <code>*<i>node_</i> = json_type{n}</code>.
     - Otherwise, if
         - `T` is `bool`, `n` is `true`, and the referenced node is in the true state, or
         - `T` is `bool`, `n` is `false`, and the referenced node is in the false state,
@@ -872,57 +885,57 @@ template<class T>
     - Otherwise, if `HasUInteger` and `unsigned_integral<T>` are both `true` and the referenced node is in the unsigned integral state,
         replaces the stored unsigned integer value with `n`.
     - Otherwise, the referenced node is in the floating-point state, replaces the stored floating-point value with `static_cast<number_type>(n)`.
-    - Otherwise, throws a `json_error` exception constructed from `json_errc::not_empty_or_number`;
+    - Otherwise, throws a `json_error` exception constructed from `json_errc::not_undefined_or_number`;
 
-9. *Returns*: `*this`.
+11. *Returns*: `*this`.
 
 ```cpp
 constexpr basic_json_slice& operator=(const string_type& str);
 ```
 
-10. *Preconditions*: `*this` is valid.
+12. *Preconditions*: `*this` is valid.
 
-11. *Effects*:
-    - If the referenced node is in the empty state, sets it to the string state and stores a string constructed from `str`.
+13. *Effects*:
+    - If the referenced node is in the undefined state, sets it to the string state and stores a string constructed from `str`.
     - Otherwise, if the referenced node is in the string state, assigns `str` to the stored string.
 
-12. *Returns*: `*this`.
+14. *Returns*: `*this`.
 
-13. *Throws*:
-    - A `json_error` exception constructed from `json_errc::not_empty_or_string` if the referenced node is not in the empty or the string state.
+15. *Throws*:
+    - A `json_error` exception constructed from `json_errc::not_undefined_or_string` if the referenced node is not in the undefined or the string state.
     - Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
 
 ```cpp
 constexpr basic_json_slice& operator=(string_type&& str);
 ```
 
-14. *Preconditions*: `*this` is valid.
+16. *Preconditions*: `*this` is valid.
 
-15. *Effects*:
-    - If the referenced node is in the empty state, sets it to the string state and stores a string constructed from `std::move(str)`.
+17. *Effects*:
+    - If the referenced node is in the undefined state, sets it to the string state and stores a string constructed from `std::move(str)`.
     - Otherwise, if the referenced node is in the string state, assigns `std::move(str)` to the stored string.
 
-16. *Returns*: `*this`.
+18. *Returns*: `*this`.
 
-17. *Throws*:
-    - A `json_error` exception constructed from `json_errc::not_empty_or_string` if the referenced node is not in the empty or the string state.
+19. *Throws*:
+    - A `json_error` exception constructed from `json_errc::not_undefined_or_string` if the referenced node is not in the undefined or the string state.
     - Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
 
 ```cpp
 constexpr basic_json_slice& operator=(const char_type* str);
 ```
 
-18. *Preconditions*: `*this` is valid. If the referenced node is in the empty or the string state, `str` points to a null-terminated `char_type` sequence.
+20. *Preconditions*: `*this` is valid. If the referenced node is in the undefined or the string state, `str` points to a null-terminated `char_type` sequence.
 
-19. *Effects*:
-    - If the referenced node is in the empty state, sets it to the string state and stores a string containing characters from `str` until `str + count`,
+21. *Effects*:
+    - If the referenced node is in the undefined state, sets it to the string state and stores a string containing characters from `str` until `str + count`,
         where `count` is the number of characters in the null-terminated sequence.
     - Otherwise, if the referenced node is in the string state, replaces the contents of `str` with that of the null-terminated sequence.
 
-20. *Returns*: `*this`.
+22. *Returns*: `*this`.
 
-21. *Throws*:
-    - A `json_error` exception constructed from `json_errc::not_empty_or_string` if the referenced node is not in the empty or the string state.
+23. *Throws*:
+    - A `json_error` exception constructed from `json_errc::not_undefined_or_string` if the referenced node is not in the undefined or the string state.
     - Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
 
 ```cpp
@@ -930,31 +943,31 @@ template<class StrLike>
   constexpr basic_json_slice& operator=(const StrLike& str);
 ```
 
-22. *Constraints*:
+24. *Constraints*:
     - `constructible_from<string_type, StrLike>` is `true`, and
     - `is_convertible_v<const KeyStrLike&, const key_char_type*>` is `false`.
 
-23. *Preconditions*: `*this` is valid.
+25. *Preconditions*: `*this` is valid.
 
-24. *Effects*:
-    - If the referenced node is in the empty state, sets it to the string state and stores a string constructed from `str`.
+26. *Effects*:
+    - If the referenced node is in the undefined state, sets it to the string state and stores a string constructed from `str`.
     - Otherwise, if the referenced node is in the string state, assigns `str` to the stored string.
 
-25. *Returns*: `*this`.
+27. *Returns*: `*this`.
 
-26. *Throws*:
-    - A `json_error` exception constructed from `json_errc::not_empty_or_string` if the referenced node is not in the empty or the string state.
+28. *Throws*:
+    - A `json_error` exception constructed from `json_errc::not_undefined_or_string` if the referenced node is not in the undefined or the string state.
     - Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
 
 ```cpp
 constexpr basic_json_slice operator[](array_type::size_type pos);
 ```
 
-27. *Preconditions*: `*this` is valid. If the referenced node is in the array state, `pos` is less than the length of the stored dynamic array.
+29. *Preconditions*: `*this` is valid. If the referenced node is in the array state, `pos` is less than the length of the stored dynamic array.
 
-28. *Returns*: A `basic_json_slice` referencing the node at offset `pos` of the stored dynamic array if the referenced node is in the array state.
+30. *Returns*: A `basic_json_slice` referencing the node at offset `pos` of the stored dynamic array if the referenced node is in the array state.
 
-29. *Throws*: A `json_error` exception constructed from `json_errc::nonarray_indexing` if the referenced node is not in the array state.
+31. *Throws*: A `json_error` exception constructed from `json_errc::nonarray_indexing` if the referenced node is not in the array state.
 
 ```cpp
 constexpr basic_json_slice operator[](const key_string_type& k);
@@ -963,25 +976,25 @@ template<class KeyStrLike>
 constexpr basic_json_slice operator[](const key_char_type* ks);
 ```
 
-30. *Constraints*: For the template overload:
+32. *Constraints*: For the template overload:
     - `Object` is transparently comparable, and
     - `is_convertible_v<const KeyStrLike&, const key_char_type*>` is `false`.
 
-31. *Preconditions*: `*this` is valid.
+33. *Preconditions*: `*this` is valid.
     For the overload taking a `const key_char_type*`, if the referenced node is in the object state, `ks` points to a null-terminated `key_char_type` sequence.
 
-32. For the overload taking a `const key_char_type*`, let `k` be a `key_string_type` value containing characters in [`ks`, `ks + count`),
+34. For the overload taking a `const key_char_type*`, let `k` be a `key_string_type` value containing characters in [`ks`, `ks + count`),
         where `count` is the number of characters in the null-terminated sequence.
 
-32. *Effects*: If the referenced node is in the object state and no element with key `k` is found in its stored map,
+35. *Effects*: If the referenced node is in the object state and no element with key `k` is found in its stored map,
         inserts an element with key `k` and a value-initialized node into the stored map.
 
-34. *Returns*:
+36. *Returns*:
     - If the referenced node is in the object state and an element with key `k` is found in its stored map,
         a `basic_json_slice` referencing the mapped value of that element.
     - Otherwise, if a new element `e` is inserted, a `basic_json_slice`, a `basic_json_slice` the mapped value of the inserted element.
 
-35. *Throws*:
+37. *Throws*:
     - A `json_error` exception constructed from `json_errc::nonobject_indexing` the referenced node is not in the object state.
     - Otherwise, the exception thrown when looking up the key, or by the allocation or construction of the inserted map element.
 
@@ -1026,7 +1039,7 @@ namespace std {
       friend constexpr void swap(basic_const_json_slice& lhs,
                                  basic_const_json_slice& rhs) noexcept;
 
-      constexpr bool empty() const noexcept;
+      constexpr bool undefined() const noexcept;
       constexpr bool string() const noexcept;
       constexpr bool null() const noexcept;
       constexpr bool boolean() const noexcept;
@@ -1108,171 +1121,178 @@ friend constexpr void swap(basic_const_json_slice& lhs,
 constexpr bool empty() const noexcept;
 ```
 
-1. *Preconditions*: `*this` is valid.
+1. *Returns*: <code>bool(<i>node_</i>)</code>.<br>
+    [*Note*: `*this` is not valid when `empty()` returns `true`. -- *end note*]
 
-2. *Returns*: `true` if the referenced node is in the empty state, `false` otherwise.
+```cpp
+constexpr bool undefined() const noexcept;
+```
+
+2. *Preconditions*: `*this` is valid.
+
+3. *Returns*: `true` if the referenced node is in the undefined state, `false` otherwise.
 
 ```cpp
 constexpr bool string() const noexcept;
 ```
 
-3. *Preconditions*: `*this` is valid.
+4. *Preconditions*: `*this` is valid.
 
-4. *Returns*: `true` if the referenced node is in the string state, `false` otherwise.
+5. *Returns*: `true` if the referenced node is in the string state, `false` otherwise.
 
 ```cpp
 constexpr bool null() const noexcept;
 ```
 
-5. *Preconditions*: `*this` is valid.
+6. *Preconditions*: `*this` is valid.
 
-6. *Returns*: `true` if the referenced node is in the null state, `false` otherwise.
+7. *Returns*: `true` if the referenced node is in the null state, `false` otherwise.
 
 ```cpp
 constexpr bool boolean() const noexcept;
 ```
 
-7. *Preconditions*: `*this` is valid.
+8. *Preconditions*: `*this` is valid.
 
-8. *Returns*: `true` if the referenced node is in the true of the false state, `false` otherwise.
+9. *Returns*: `true` if the referenced node is in the true of the false state, `false` otherwise.
 
 ```cpp
 constexpr bool number() const noexcept;
 ```
 
-9. *Preconditions*: `*this` is valid.
+10. *Preconditions*: `*this` is valid.
 
-10. *Returns*: `true` if the referenced node is in the number state, `false` otherwise.
+11. *Returns*: `true` if the referenced node is in the number state, `false` otherwise.
 
 ```cpp
 constexpr bool object() const noexcept;
 ```
 
-11. *Preconditions*: `*this` is valid.
+12. *Preconditions*: `*this` is valid.
 
-12. *Returns*: `true` if the referenced node is in the object state, `false` otherwise.
+13. *Returns*: `true` if the referenced node is in the object state, `false` otherwise.
 
 ```cpp
 constexpr bool array() const noexcept;
 ```
 
-13. *Preconditions*: `*this` is valid.
+14. *Preconditions*: `*this` is valid.
 
-14. *Returns*: `true` if the referenced node is in the array state, `false` otherwise.
+15. *Returns*: `true` if the referenced node is in the array state, `false` otherwise.
 
 ```cpp
 constexpr bool integer() const noexcept;
 ```
 
-15. *Constraints*: `HasInteger` is `true`.
+16. *Constraints*: `HasInteger` is `true`.
 
-16. *Preconditions*: `*this` is valid.
+17. *Preconditions*: `*this` is valid.
 
-17. *Returns*: `true` if the referenced node is in the signed integral state, `false` otherwise.
+18. *Returns*: `true` if the referenced node is in the signed integral state, `false` otherwise.
 
 ```cpp
 constexpr bool uinteger() const noexcept;
 ```
 
-18. *Constraints*: `HasUInteger` is `true`.
+19. *Constraints*: `HasUInteger` is `true`.
 
-19. *Preconditions*: `*this` is valid.
+20. *Preconditions*: `*this` is valid.
 
-20. *Returns*: `true` if the referenced node is in the unsigned integral state, `false` otherwise.
+21. *Returns*: `true` if the referenced node is in the unsigned integral state, `false` otherwise.
 
 ```cpp
 constexpr explicit operator bool() const;
 ```
 
-21. *Preconditions*: `*this` is valid.
+22. *Preconditions*: `*this` is valid.
 
-22. *Returns*: `true` if the referenced node is in the true state, `false` if the referenced node is in the false state.
+23. *Returns*: `true` if the referenced node is in the true state, `false` if the referenced node is in the false state.
 
-23. *Throws*: A `json_error` exception constructed from `json_errc::not_boolean` if the referenced node is not in the true or the false state.
+24. *Throws*: A `json_error` exception constructed from `json_errc::not_boolean` if the referenced node is not in the true or the false state.
 
 ```cpp
 constexpr explicit operator number_type() const;
 ```
 
-24. *Preconditions*: `*this` is valid.
+25. *Preconditions*: `*this` is valid.
 
-25. *Returns*: The stored numeric value converted to `number_type` if the referenced node is in the floating-point, the signed integral, or the unsigned integral state.
+26. *Returns*: The stored numeric value converted to `number_type` if the referenced node is in the floating-point, the signed integral, or the unsigned integral state.
 
-26. *Throws*: A `json_error` exception constructed from `json_errc::not_number` if the referenced node is not in the floating-point, the signed integral, or the unsigned integral state.
+27. *Throws*: A `json_error` exception constructed from `json_errc::not_number` if the referenced node is not in the floating-point, the signed integral, or the unsigned integral state.
 
 ```cpp
 constexpr explicit operator nulljson_t() const;
 ```
 
-27. *Preconditions*: `*this` is valid.
+28. *Preconditions*: `*this` is valid.
 
-28. *Returns*: `nulljson_t{}` if the referenced node is in the null state.
+29. *Returns*: `nulljson_t{}` if the referenced node is in the null state.
 
-29. *Throws*: A `json_error` exception constructed from `json_errc::not_null` if the referenced node is not in the null state.
+30. *Throws*: A `json_error` exception constructed from `json_errc::not_null` if the referenced node is not in the null state.
 
 ```cpp
 constexpr explicit operator const string_type&() const&;
 ```
 
-30. *Preconditions*: `*this` is valid.
+31. *Preconditions*: `*this` is valid.
 
-31. *Returns*: The reference to the stored string if the referenced node is in the string state.
+32. *Returns*: The reference to the stored string if the referenced node is in the string state.
 
-32. *Throws*: A `json_error` exception constructed from `json_errc::not_string` if the referenced node is not in the string state.
+33. *Throws*: A `json_error` exception constructed from `json_errc::not_string` if the referenced node is not in the string state.
 
 ```cpp
 constexpr explicit operator const array_type&() const&;
 ```
 
-33. *Preconditions*: `*this` is valid.
+34. *Preconditions*: `*this` is valid.
 
-34. *Returns*: The reference to the stored dynamic array if the referenced node is in the array state.
+35. *Returns*: The reference to the stored dynamic array if the referenced node is in the array state.
 
-35. *Throws*: A `json_error` exception constructed from `json_errc::not_array` if the referenced node is not in the array state.
+36. *Throws*: A `json_error` exception constructed from `json_errc::not_array` if the referenced node is not in the array state.
 
 ```cpp
 constexpr explicit operator const object_type&() const&;
 ```
 
-36. *Preconditions*: `*this` is valid.
+37. *Preconditions*: `*this` is valid.
 
-37. *Returns*: The reference to the stored map if the referenced node is in the object state.
+38. *Returns*: The reference to the stored map if the referenced node is in the object state.
 
-38. *Throws*: A `json_error` exception constructed from `json_errc::not_object` if the referenced node is not in the object state.
+39. *Throws*: A `json_error` exception constructed from `json_errc::not_object` if the referenced node is not in the object state.
 
 ```cpp
 constexpr explicit operator integer_type() const;
 ```
 
-39. *Constraints*: `HasInteger` is `true`.
+40. *Constraints*: `HasInteger` is `true`.
 
-40. *Preconditions*: `*this` is valid.
+41. *Preconditions*: `*this` is valid.
 
-41. *Returns*: The stored integer value if the referenced node is in the signed integral state.
+42. *Returns*: The stored integer value if the referenced node is in the signed integral state.
 
-42. *Throws*: A `json_error` exception constructed from `json_errc::not_integer` if the referenced node is not in the signed integral state.
+43. *Throws*: A `json_error` exception constructed from `json_errc::not_integer` if the referenced node is not in the signed integral state.
 
 ```cpp
 constexpr explicit operator uinteger_type() const;
 ```
 
-43. *Constraints*: `HasUInteger` is `true`.
+44. *Constraints*: `HasUInteger` is `true`.
 
-44. *Preconditions*: `*this` is valid.
+45. *Preconditions*: `*this` is valid.
 
-45. *Returns*: The stored integer value if the referenced node is in the unsigned integral state.
+46. *Returns*: The stored integer value if the referenced node is in the unsigned integral state.
 
-46. *Throws*: A `json_error` exception constructed from `json_errc::not_uinteger` if the referenced node is not in the unsigned integral state.
+47. *Throws*: A `json_error` exception constructed from `json_errc::not_uinteger` if the referenced node is not in the unsigned integral state.
 
 ```cpp
 constexpr basic_const_json_slice operator[](array_type::size_type pos) const;
 ```
 
-47. *Preconditions*: `*this` is valid. If the referenced node is in the array state, `pos` is less than the length of the stored dynamic array.
+48. *Preconditions*: `*this` is valid. If the referenced node is in the array state, `pos` is less than the length of the stored dynamic array.
 
-48. *Returns*: A `basic_const_json_slice` referencing the node at offset `pos` of the stored dynamic array if the referenced node is in the array state.
+49. *Returns*: A `basic_const_json_slice` referencing the node at offset `pos` of the stored dynamic array if the referenced node is in the array state.
 
-49. *Throws*: A `json_error` exception constructed from `json_errc::nonarray_indexing` if the referenced node is not in the array state.
+50. *Throws*: A `json_error` exception constructed from `json_errc::nonarray_indexing` if the referenced node is not in the array state.
 
 ```cpp
 constexpr basic_const_json_slice operator[](const key_string_type& k) const;
@@ -1281,20 +1301,20 @@ template<class KeyStrLike>
 constexpr basic_const_json_slice operator[](const key_char_type* ks) const;
 ```
 
-50. *Constraints*: For the template overload:
+51. *Constraints*: For the template overload:
     - `Object` is transparently comparable, and
     - `is_convertible_v<const KeyStrLike&, const key_char_type*>` is `false`.
 
-51. *Preconditions*: `*this` is valid.
+52. *Preconditions*: `*this` is valid.
     For the overload taking a `const key_char_type*`, if the referenced node is in the object state, `ks` points to a null-terminated `key_char_type` sequence.
 
-52. For the overload taking a `const key_char_type*`, let `k` be a `key_string_type` value containing characters in [`ks`, `ks + count`),
+53. For the overload taking a `const key_char_type*`, let `k` be a `key_string_type` value containing characters in [`ks`, `ks + count`),
         where `count` is the number of characters in the null-terminated sequence.
 
-53. *Returns*: If the referenced node is in the object state and an element with key `k` is found in the stored map,
+54. *Returns*: If the referenced node is in the object state and an element with key `k` is found in the stored map,
     a `basic_const_json_slice` referencing the mapped value of that element.
 
-54. *Throws*:
+55. *Throws*:
     - A `json_error` exception constructed from `json_errc::nonobject_indexing` if the referenced node is not in the object state.
     - Otherwise, the exception thrown when looking up the key or `json_error` exception constructed from `json_errc::key_not_found` if no element with key `k` is found.
 
@@ -1304,22 +1324,22 @@ constexpr basic_const_json_slice operator[](const key_char_type* ks) const;
 namespace std {
   enum class json_errc : <i>unspecified</i> {
     // invalid access
-    not_null            = <i>see below</i>,
-    not_boolean         = <i>see below</i>,
-    not_number          = <i>see below</i>,
-    not_integer         = <i>see below</i>,
-    not_uinteger        = <i>see below</i>,
-    not_string          = <i>see below</i>,
-    not_array           = <i>see below</i>,
-    not_object          = <i>see below</i>,
-    nonarray_indexing   = <i>see below</i>,
-    nonobject_indexing  = <i>see below</i>,
-    key_not_found       = <i>see below</i>,
+    not_null                = <i>see below</i>,
+    not_boolean             = <i>see below</i>,
+    not_number              = <i>see below</i>,
+    not_integer             = <i>see below</i>,
+    not_uinteger            = <i>see below</i>,
+    not_string              = <i>see below</i>,
+    not_array               = <i>see below</i>,
+    not_object              = <i>see below</i>,
+    nonarray_indexing       = <i>see below</i>,
+    nonobject_indexing      = <i>see below</i>,
+    key_not_found           = <i>see below</i>,
 
     // invalid modification
-    not_empty_or_null   = <i>see below</i>,
-    not_empty_or_number = <i>see below</i>,
-    not_empty_or_string = <i>see below</i>,
+    not_undefined_or_null   = <i>see below</i>,
+    not_undefined_or_number = <i>see below</i>,
+    not_undefined_or_string = <i>see below</i>,
   };
 }
 </pre>
@@ -1361,7 +1381,7 @@ Add a new feature-test macro to [version.syn].
 
 # Acknowledgements
 
-Thanks to F.v.S for the information about the polymorphic allocator, and the suggestions for nulljson_t and constructor.
+Thanks to An Jiang for the information about `polymorphic_allocator`, and the suggestions for `nulljson_t` and constructor.
 
 Thanks to ykiko for simplifying code using fold expressions.
 

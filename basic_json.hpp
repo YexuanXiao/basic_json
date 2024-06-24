@@ -828,9 +828,9 @@ namespace bizwen
 	public:
 		using base_type::operator[];
 
-		constexpr void clear()
+		constexpr void clear() noexcept
 		{
-			json_type::clear(node_);
+			json_type::clear_node(*node_);
 		}
 
 		constexpr basic_json_slice operator[](key_string_type const& k)
