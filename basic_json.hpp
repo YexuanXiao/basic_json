@@ -68,7 +68,7 @@ namespace bizwen
 	enum class json_errc
 	{
 		// for accessor
-		is_empty = 1,
+		is_undefined = 1,
 		not_null,
 		not_boolean,
 		not_number,
@@ -81,14 +81,14 @@ namespace bizwen
 		nonobject_indexing,
 		key_not_found,
 		// for modifier
-		not_empty_or_null,
-		not_empty_or_boolean,
-		not_empty_or_number,
-		not_empty_or_integer,
-		not_empty_or_uinteger,
-		not_empty_or_string,
-		not_empty_or_array,
-		not_empty_or_object,
+		not_undefined_or_null,
+		not_undefined_or_boolean,
+		not_undefined_or_number,
+		not_undefined_or_integer,
+		not_undefined_or_uinteger,
+		not_undefined_or_string,
+		not_undefined_or_array,
+		not_undefined_or_object,
 		// for deserializer
 		unsupported_option,
 		unexpect_token,
@@ -106,7 +106,7 @@ namespace bizwen
 		too_deep,
 		too_large,
 		// for serializer
-		unexpect_empty,
+		unexpect_undefined,
 		number_nan,
 		number_inf,
 		// for reflector
@@ -151,14 +151,14 @@ namespace bizwen
 				return "JSON error: value isn't an object but is accessed using operator[].";
 			case json_errc::key_not_found:
 				return "JSON error: key does not exist.";
-			case json_errc::not_empty_or_null:
-				return "JSON error: current value is not empty or not null.";
-			case json_errc::not_empty_or_boolean:
-				return "JSON error: current value is not empty or not bool.";
-			case json_errc::not_empty_or_number:
-				return "JSON error: current value is not empty or not a number.";
-			case json_errc::not_empty_or_string:
-				return "JSON error: current value is not empty or not a string.";
+			case json_errc::not_undefined_or_null:
+				return "JSON error: current value is not undefined or not null.";
+			case json_errc::not_undefined_or_boolean:
+				return "JSON error: current value is not undefined or not bool.";
+			case json_errc::not_undefined_or_number:
+				return "JSON error: current value is not undefined or not a number.";
+			case json_errc::not_undefined_or_string:
+				return "JSON error: current value is not undefined or not a string.";
 			default:
 				return "JSON error: unexpected error.";
 			}
@@ -221,7 +221,7 @@ namespace bizwen
 
 		enum class kind_t : unsigned char
 		{
-			empty,
+			undefined,
 			null,
 			true_value,
 			false_value,
@@ -349,7 +349,12 @@ namespace bizwen
 		public:
 			[[nodiscard]] constexpr bool empty() const noexcept
 			{
-				return kind() == kind_t::empty;
+				return node_ != nullptr;
+			}
+
+			[[nodiscard]] constexpr bool undefined() const noexcept
+			{
+				return kind() == kind_t::undefined;
 			}
 
 			[[nodiscard]] constexpr bool string() const noexcept
@@ -728,7 +733,7 @@ namespace bizwen
 
 		using base_type::array;
 		using base_type::boolean;
-		using base_type::empty;
+		using base_type::undefined;
 		using base_type::integer;
 		using base_type::null;
 		using base_type::number;
@@ -823,9 +828,14 @@ namespace bizwen
 	public:
 		using base_type::operator[];
 
+		constexpr void clear()
+		{
+			json_type::clear(node_);
+		}
+
 		constexpr basic_json_slice operator[](key_string_type const& k)
 		{
-			auto e = empty();
+			auto e = undefined();
 
 			if (!object() && !e)
 				throw json_error(json::errc::nonobject_indexing);
@@ -845,7 +855,7 @@ namespace bizwen
 		    && detail::noncovertible_to_key_char_cptr<KeyStrLike, Object>
 		constexpr basic_json_slice operator[](KeyStrLike const& k)
 		{
-			auto e = empty();
+			auto e = undefined();
 
 			if (!object() && !e)
 				throw json_error(json::errc::nonobject_indexing);
@@ -862,7 +872,7 @@ namespace bizwen
 
 		constexpr basic_json_slice operator[](key_char_type const* k)
 		{
-			auto e = empty();
+			auto e = undefined();
 
 			if (!object() && !e)
 				throw json_error(json_errc::nonobject_indexing);
@@ -890,16 +900,16 @@ namespace bizwen
 		constexpr basic_json_slice& operator=(string_type const& str)
 		{
 			bool is_string = string();
-			bool is_empty = empty();
+			bool is_undefined = undefined();
 
-			if (!is_string && !is_empty)
-				throw json_error(json_errc::not_empty_or_string);
+			if (!is_string && !is_undefined)
+				throw json_error(json_errc::not_undefined_or_string);
 
 			if (is_string)
 			{
 				*static_cast<string_type*>(stor().str_) = str;
 			}
-			else // empty
+			else // undefined
 			{
 				detail::node_variant_alloc_guard<string_type, node_type> guard(*node_);
 				auto ator = string_ator(node_->get_allocator_ref());
@@ -916,16 +926,16 @@ namespace bizwen
 		constexpr basic_json_slice& operator=(string_type&& str)
 		{
 			bool is_string = string();
-			bool is_empty = empty();
+			bool is_undefined = undefined();
 
-			if (!is_string && !is_empty)
-				throw json_error(json_errc::not_empty_or_string);
+			if (!is_string && !is_undefined)
+				throw json_error(json_errc::not_undefined_or_string);
 
 			if (is_string)
 			{
 				*static_cast<string_type*>(stor().str_) = std::move(str);
 			}
-			else // empty
+			else // undefined
 			{
 				detail::node_variant_alloc_guard<string_type, node_type> guard(*node_);
 				auto ator = string_ator(node_->get_allocator_ref());
@@ -942,16 +952,16 @@ namespace bizwen
 		constexpr basic_json_slice& operator=(char_type const* str)
 		{
 			bool is_string = string();
-			bool is_empty = empty();
+			bool is_undefined = undefined();
 
-			if (!is_string && !is_empty)
-				throw json_error(json_errc::not_empty_or_string);
+			if (!is_string && !is_undefined)
+				throw json_error(json_errc::not_undefined_or_string);
 
 			if (is_string)
 			{
 				*static_cast<string_type*>(stor().str_) = str;
 			}
-			else // empty
+			else // undefined
 			{
 				detail::node_variant_alloc_guard<string_type, node_type> guard(*node_);
 				auto ator = string_ator(node_->get_allocator_ref());
@@ -971,10 +981,10 @@ namespace bizwen
 		constexpr basic_json_slice& operator=(StrLike const& str)
 		{
 			bool is_string = string();
-			bool is_empty = empty();
+			bool is_undefined = undefined();
 
-			if (!is_string && !is_empty)
-				throw json_error(json_errc::not_empty_or_string);
+			if (!is_string && !is_undefined)
+				throw json_error(json_errc::not_undefined_or_string);
 
 			if (is_string)
 			{
@@ -997,12 +1007,12 @@ namespace bizwen
 		constexpr basic_json_slice& operator=(nulljson_t)
 		{
 			bool is_null = null();
-			bool is_empty = empty();
+			bool is_undefined = undefined();
 
-			if (!is_null && !is_empty)
-				throw json_error(json_errc::not_empty_or_null);
+			if (!is_null && !is_undefined)
+				throw json_error(json_errc::not_undefined_or_null);
 
-			if (is_empty)
+			if (is_undefined)
 				node_->kind_ = kind_t::null;
 
 			return *this;
@@ -1015,21 +1025,21 @@ namespace bizwen
 			if constexpr (std::same_as<T, bool>)
 			{
 				bool is_boolean = boolean();
-				bool is_empty = empty();
+				bool is_undefined = undefined();
 
-				if (!is_boolean && !is_empty)
-					throw json_error(json_errc::not_empty_or_boolean);
+				if (!is_boolean && !is_undefined)
+					throw json_error(json_errc::not_undefined_or_boolean);
 
-				if (is_empty)
+				if (is_undefined)
 					node_->kind_ = (n ? kind_t::true_value : kind_t::false_value);
 			}
 			else if constexpr (HasInteger && std::signed_integral<T>)
 			{
 				bool is_number = number() || uinteger() || integer();
-				bool is_empty = empty();
+				bool is_undefined = undefined();
 
-				if (!is_number && !is_empty)
-					throw json_error(json_errc::not_empty_or_number);
+				if (!is_number && !is_undefined)
+					throw json_error(json_errc::not_undefined_or_number);
 
 				node_->stor_.int_ = n;
 				node_->kind_ = kind_t::integer;
@@ -1037,10 +1047,10 @@ namespace bizwen
 			else if constexpr (HasUInteger && std::unsigned_integral<T>)
 			{
 				bool is_number = number() || uinteger() || integer();
-				bool is_empty = empty();
+				bool is_undefined = undefined();
 
-				if (!is_number && !is_empty)
-					throw json_error(json_errc::not_empty_or_number);
+				if (!is_number && !is_undefined)
+					throw json_error(json_errc::not_undefined_or_number);
 
 				node_->stor_.uint_ = n;
 				node_->kind_ = kind_t::uinteger;
@@ -1048,10 +1058,10 @@ namespace bizwen
 			else // fallback
 			{
 				bool is_number = number() || uinteger() || integer();
-				bool is_empty = empty();
+				bool is_undefined = undefined();
 
-				if (!is_number && !is_empty)
-					throw json_error(json_errc::not_empty_or_number);
+				if (!is_number && !is_undefined)
+					throw json_error(json_errc::not_undefined_or_number);
 
 				node_->stor_.num_ = n;
 				node_->kind_ = kind_t::number;
@@ -1840,9 +1850,9 @@ namespace bizwen
 		treat_null_as_defaulted = 0x80,
 		treat_undefined_as_defaulted = 0x100,
 		// for serializer
-		treat_empty_as_null = 0x200,
-		treat_empty_as_undefined = 0x400,
-		treat_empty_as_literal = 0x800, // debug only
+		treat_undefined_as_null = 0x200,
+		treat_undefined_as_undefined = 0x400,
+		treat_undefined_as_literal = 0x800, // debug only
 	};
 
 	using json = basic_json<>;
