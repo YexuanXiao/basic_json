@@ -1843,6 +1843,7 @@ namespace bizwen
 	};
 
 	using json = basic_json<>;
+	using json_node = basic_json_node<>;
 	using json_slice = basic_json_slice<>;
 	using const_json_slice = basic_const_json_slice<>;
 
@@ -1870,6 +1871,7 @@ namespace bizwen
 		using basic_json = bizwen::basic_json<Node, String, Array, Object, HasInteger, HasUInteger>;
 
 		using json = basic_json<>;
+		using json_node = basic_json_node<>;
 		using json_slice = basic_json_slice<>;
 		using const_json_slice = basic_const_json_slice<>;
 	} // namespace pmr
