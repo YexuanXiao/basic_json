@@ -302,6 +302,7 @@ namespace std {
     class basic_const_json_slice;
 
   using json             = basic_json<>;
+  using json_node        = basic_json_node<>;
   using json_slice       = basic_json_slice<>;
   using const_json_slice = basic_const_json_slice<>;
 
@@ -330,6 +331,7 @@ namespace std {
                                                                HasInteger, HasUInteger>;
 
     using json             = basic_json<>;
+    using json_node        = basic_json_node<>;
     using json_slice       = basic_json_slice<>;
     using const_json_slice = basic_const_json_slice<>;
   }
