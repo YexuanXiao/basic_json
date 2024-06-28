@@ -369,11 +369,14 @@ namespace std {
 
 ### Class template `basic_json_node`
 
-```cpp
+<pre highlight="c++">
 namespace std {
-  template<class Number = double, class Integer = long long, class UInteger = unsigned long long,
+  template&lt;class Number = double, class Integer = long long, class UInteger = unsigned long long,
            class Allocator = allocator<char>>
     class basic_json_node {
+    private:
+      using <i>void-ptr</i> = allocator_traits<Allocator>::void_pointer;   // exposition only
+
     public:
       using number_type    = Number;
       using integer_type   = Integer;
@@ -381,31 +384,37 @@ namespace std {
       using allocator_type = Allocator;
 
       constexpr basic_json_node() noexcept(is_nothrow_default_constructible_v<Allocator>)
-        requires default_initializable<Allocator>;
+        requires default_initializable&lt;Allocator>;
       constexpr explicit basic_json_node(const Allocator& a) noexcept;
+
+      constexpr basic_json_node(const basic_json_node& other) noexcept;
+      constexpr basic_json_node(basic_json_node&& other) noexcept;
+      constexpr basic_json_node& operator=(const basic_json_node& other)
+        noexcept(is_nothrow_copy_assignable_v&lt;Allocator>);
+      constexpr basic_json_node& operator=(basic_json_node&& other)
+        noexcept(is_nothrow_move_assignable_v&lt;Allocator>);
+      constexpr ~basic_json_node() noexcept;
     };
 
-  template<class Number, class Integer, class UInteger, class Allocator, class Allocator2>
-    struct uses_allocator<basic_json_node<Number, Integer, UInteger, Allocator>, Allocator2> :
+  template&lt;class Number, class Integer, class UInteger, class Allocator, class Allocator2>
+    struct uses_allocator&lt;basic_json_node&lt;Number, Integer, UInteger, Allocator>, Allocator2> :
       false_type {};
 }
-```
+</pre>
 
 1. *Mandates*:
     - `floating_point<Number>`, `signed_integral<Integer>`, and `unsigned_integral<UInteger>` are all `true`.
     - `Allocator` meets the *Cpp17Allocator* requirements, no diagnostic is required for this.
 
-2. *Remarks*: Special member functions other than the default constructor are defaulted and eligible.
-    If `Allocator` is a trivially copyable class, `basic_json_node` is trivially copyable too.
-
-3. If the node is in the floating-point, signed integral, or unsigned integral state,
+2. If the node is in the floating-point, signed integral, or unsigned integral state,
     an object of type `number_type`, `integer_type`, or `uinteger_type` stored within the node.
-    If the node is in the string, array, or object state, an object of the type corresponding to the state is dynamically allocated, and a pointer to it is stored with the node.
+    If the node is in the string, array, or object state, an object of the type corresponding to the state is dynamically allocated,
+    and a <code><i>void-ptr</i></code> to it is stored within the node.
     [*Note*: A single node type can refer to string, dynamic array, or map of different types.  -- *end note*]
 
-4. [*Note*: The `uses_allocator` partial specialization indicates that `basic_json_node` should not be uses-allocator constructed. -- *end note*]
+3. [*Note*: The `uses_allocator` partial specialization indicates that `basic_json_node` should not be uses-allocator constructed. -- *end note*]
 
-#### Construction
+#### Construction, assignment, and destruction
 
 ```cpp
 constexpr basic_json_node() noexcept(is_nothrow_default_constructible_v<Allocator>)
@@ -419,6 +428,54 @@ constexpr explicit basic_json_node(const Allocator& a) noexcept;
 ```
 
 2. *Effects*: Initializes the node to the undefined state. Copy-constructs the stored allocator from `a`.
+
+```cpp
+constexpr basic_json_node(const basic_json_node& other) noexcept;
+constexpr basic_json_node(basic_json_node&& other) noexcept;
+```
+
+3. *Effects*:
+    - For the copy constructor, copy-constructs the stored allocator from that of `other`; for the move constructor, move construction is used instead.
+    - Sets `*this` in the same state as `other`.
+    - If `other` stores a numeric value, stores the same value in `this`.
+    - Otherwise, if `other` stores a <code><i>void-ptr</i></code> to an allocated object,
+        for the copy constructor, copy-constructs that pointer into `*this`; for the move constructor, move construction is used instead.
+
+4. *Remarks*:
+    - The copy constructor is trivial if both `is_trivially_copy_constructible_v<Allocator>` and <code>is_trivially_copy_constructible_v&lt;<i>void-ptr</i>></code> are `true`.
+    - The move constructor is trivial if both `is_trivially_move_constructible_v<Allocator>` and <code>is_trivially_move_constructible_v&lt;<i>void-ptr</i>></code> are `true`.
+
+```cpp
+constexpr basic_json_node& operator=(const basic_json_node& other)
+  noexcept(is_nothrow_copy_assignable_v<Allocator>);
+constexpr basic_json_node& operator=(basic_json_node&& other)
+  noexcept(is_nothrow_move_assignable_v<Allocator>);
+```
+
+5. *Constraints*: For the move assignment operator, `is_move_assignable_v<Allocator>` is `true`.
+
+6. *Effects*:
+    - If `this == addressof(other)`, does nothing.
+    - Otherwise, copy- or move-assign the stored allocator of `*this` from that of `other`, for copy or move assignment operator respectively. And then
+        - if `*this` is in the same state as `other` and stores a numeric value or <code><i>void-ptr</i></code>,
+            copy- or move-assign the stored numeric value or <code><i>void-ptr</i></code> in `other` to that of `*this`, for copy or move assignment operator respectively, otherwise,
+        - destroys the stored a numeric value or <code><i>void-ptr</i></code>, if any, and then
+            copy- or move-constructs the numeric value or <code><i>void-ptr</i></code> from that of `other` for copy or move assignment operator respectively, if any.
+
+7. *Returns*: `*this`.
+
+8. *Remarks*:
+    - The copy assignment operator is deleted if `is_copy_assignable_v<Allocator>` is `false`.
+    - The copy assignment operator is trivial if `is_trivially_copy_assignable_v<Allocator>`, <code>is_trivially_destructible_v&lt;<i>void-ptr</i>></code>, <code>is_trivially_copy_constructible_v&lt;<i>void-ptr</i>></code>, and <code>is_trivially_copy_assignable_v&lt;<i>void-ptr</i>></code> are all `true`.
+    - The move assignment operator is trivial if `is_trivially_move_assignable_v<Allocator>`, <code>is_trivially_destructible_v&lt;<i>void-ptr</i>></code>, <code>is_trivially_move_constructible_v&lt;<i>void-ptr</i>></code>, and <code>is_trivially_move_assignable_v&lt;<i>void-ptr</i>></code> are all `true`.
+
+```cpp
+constexpr ~basic_json_node() noexcept;
+```
+
+9. *Effects*: Destroys the stored allocator, and the numeric value or the <code><i>void-ptr</i></code>, if any. [*Note*: No deallocation happens. -- *end note*]
+
+10. *Remarks*: The destructor is trivial if both `is_trivially_destructible_v<Allocator>` and <code>is_trivially_destructible_v&lt;<i>void-ptr</i>></code> are `true`.
 
 ### Class template `basic_json`
 
