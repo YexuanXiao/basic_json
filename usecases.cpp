@@ -1,101 +1,85 @@
 #include "basic_json.hpp"
 #include <string_view>
+#include <cassert>
 int main()
 {
-	/*
-	    Note: This code is for demonstration purposes only and can be compiled only, not be run.
-	*/
-	// json
 	using json = bizwen::json;
-	using namespace std::literals;
-	json j01{};
-	json j02{ j01 };
-	// j j03{ nullptr };  deleted
-	json j04{ 1. };
-	json j05{ true };
-	json j06{ 1.f };
-	json j07{ 1u };
-	json j08{ 1l };
-	json j09{ 1ll };
-	json j10{ 1ull };
-	json j11{ "aaa" };
-	auto str = "bbb";
-	json j12{ str, str + 3 };
-	json j13{ str, 3 };
-	json j14{ str };
-	json j15{ "bbb"sv };
-	// since initializer_list returns a reference to a const object, this method is inefficient
-	// json j16{ json::array_type{ json{0}, json{1} } };
-	// json j17{ json::object_type{ { "key0"s, json{ 0 } }, { "key1"s, json{ 1 } } } };
-	json j16{ json::array{ 0, 1 } };
-	json j17{ json::object{"key0"s, 0, "key1"s, 1} };
-	json j18{ bizwen::basic_json_node<>{} };
-	swap(j17, j18); // adl hidden friend
-	j17.swap(j18);
-	j17 = j18;
-	std::swap(j17, j18);
-	json::node_type n{ std::move(j18) };
-
-	// const_slice
-	using const_slice = bizwen::const_json_slice;
-	const_slice c1;
-	c1.empty();
-	c1.array();
-	c1.string();
-	c1.null();
-	c1.boolean();
-	c1.number();
-	c1.object();
-	c1.array();
-	c1.object();
-	c1.integer();
-	c1.uinteger();
-	c1["key"];
-	c1["key"s];
-	// requires transparent comparable
-	// c1["key"sv];
-	c1[1];
-	const_slice c2{ j17 };
-	c2.swap(c1);
-	std::swap(c1, c2);
-	const_slice c3{ std::move(j17) };
-	const_slice c4 = c3;
-	const_slice c5 = std::move(c4);
-	c4 = c5;
-	c5 = std::move(c4);
-	bool b{ c5 };
-	bizwen::nulljson_t nj{ c5 };
-	json::string_type const& s{ c5 };
-	json::array_type const& a{ c5 };
-	for (auto const& i : a)
-	{
-		const_slice item{ i };
-	}
-	json::object_type const& o{ c5 };
-	for (auto const& [k, v] : o)
-	{
-		const_slice item{ v };
-	}
-	long long ll{ c5 };
-	unsigned long long ull{ c5 };
-
-	// slice
+	using node = bizwen::json_node;
 	using slice = bizwen::json_slice;
-	slice s1{};
-	slice s2{ j17 };
-	const_slice c6 = s2;
-	std::string str1;
-	s2 = str1;
-	s2 = std::string{};
-	s2 = "aaa";
-	s2 = std::string_view{};
-	s2 = bizwen::nulljson;
-	s2 = true;
-	s2 = 1.;
-	s2 = 1;
-	s2 = 1u;
-	s2 = 1ll;
-	s2 = 1ull;
-	s2 = n;
-	s2["key"] = 1;
+	using const_slice = bizwen::const_json_slice;
+	auto null = bizwen::nulljson;
+	using namespace std::literals;
+	// A json object represents a json value. The default constructed json object does not hold any value, and its state is "undefined".
+	json j01{};
+	// Construct a json value with status "number" and value `1`.
+	json j02{ 1. };
+	// Construct a json value with status "true_value" and value `true`.
+	json j03{ true };
+	// Construct a json value with status "uinteger" and value `1`. This method is used to accurately store integers with more than 52 bits.
+	json j04{ 1ull };
+	// Construct a json value with status "string" and value `"abcdef"`.
+	json j05{ "abcdef" };
+	// Construct json with nullptr is forbidden because json does not have a pointer type and nullptr does not represent the empty string.
+	// json j05{ nullptr };
+	// Constructs a json value with status "null" and value `nulljson`.
+	json j06{ null };
+	// Since initializer_list returns a reference to a const object, this method is inefficient
+	// json j07{ json::array_type{ json{0}, json{1} } };
+	// json j08{ json::object_type{ { "key0"s, json{ 0 } }, { "key1"s, json{ 1 } } } };
+	// Use the helper class templates json::array and json::object for easy and efficient construction of json arrays and json objects.
+	// Constructs a json value with the state "array", containing two ordered values 0 and 1.
+	json j07{ json::array{ 0, 1 } };
+	// Construct a json value with state "object" such that `s08["key0"]==0` and `s08["key1"]==1` is true.
+	json j08{ json::object{ "key0"s, 0, "key1"s, 1 } };
+	// Copy a json object copies its stored state and values.
+	auto j09{ j08 };
+
+	// slice is an accessor and modifier of json values, and the default constructed slice is not associated with any json
+	slice s01{};
+	// Use empty() to test if slice is associated with a json
+	auto is_empty{ s01.empty() };
+	assert(is_empty); // does nothing
+	slice s07{ j07 }; // s07 is associated to j07
+	auto is_array{ s07.array() };
+	assert(is_array); // does nothing
+	// Convert a json value (s01) with state "undefined" to "integer" and set the value to `1`.
+	s01 = 1;
+	slice s02{ j02 }; // s02 is associated to j02
+	// Change the value of j02 to 2.f
+	s02 = 2.f;
+	// Sets the state of j02 to "undefined" and destroys the previous value.
+	s02.reset();
+	slice s07{ j07 };
+	long long iv{ s07[0] };
+
+	// Iterate j07
+	for (auto i : s07.as_array())
+	{
+		assert(i.integer()); // does nothing
+	}
+	// Append a value to j07
+	json::array_type& arr{ s07 };
+	arr.push_back(json{ 2 });
+	slice s08{ j08 };
+	// Iterate j08
+	for (auto const& [k, v] : s08.as_object())
+	{
+		assert(v.integer()); // does nothing
+	}
+	// Insert k-v pairs into j08
+	s08["key3"] = 2;
+	// Copying a slice is trivial
+	auto s08_1{ s08 };
+
+	// const_slice is similar to slice, but has only observers and never modifies the associated json
+	const_slice c01{ s01 };
+	// Unlike slice, if the key does not exist in the object then a json_error exception is thrown
+	try
+	{
+		c01["keyn"];
+	}
+	catch (bizwen::json_error const& je)
+	{
+		assert(je.code() == bizwen::json_errc::key_not_found); // does nothing
+	}
 }
