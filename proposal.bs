@@ -265,7 +265,7 @@ int main()
 	s2 = 1ull;
 	s2 = n;
 	s2["key"] = 1;
-	s2.clear();
+	s2.reset();
 }
 ```
 
@@ -791,7 +791,7 @@ namespace std {
         constexpr basic_const_json_slice operator[](const KeyStrLike& k) const;
       constexpr basic_const_json_slice operator[](const key_char_type* ks) const;
 
-      constexpr void clear() noexcept;
+      constexpr void reset() noexcept;
       constexpr basic_json_slice& operator=(nulljson_t);
       template&lt;class T>
         constexpr basic_json_slice& operator=(T n);
@@ -898,11 +898,11 @@ constexpr basic_const_json_slice operator[](const key_char_type* ks) const;
 
 #### Modifiers
 
-1. Except for `clear`, a modifier function of `basic_json_slice` may change the state of the referenced node, but only if the node was in the undefined state.
+1. Except for `reset`, a modifier function of `basic_json_slice` may change the state of the referenced node, but only if the node was in the undefined state.
     A `json_error` exception is thrown if one attempts to change the established non-undefined state of the node.
 
 ```cpp
-constexpr void clear() noexcept;
+constexpr void reset() noexcept;
 ```
 
 2. *Preconditions*: `*this` is valid.
