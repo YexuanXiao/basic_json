@@ -49,7 +49,6 @@ int main()
 	s02 = 2.f;
 	// Sets the state of j02 to "undefined" and destroys the previous value.
 	s02.reset();
-	slice s07{ j07 };
 	long long iv{ s07[0] };
 
 	// Iterate j07
@@ -58,6 +57,7 @@ int main()
 		assert(i.integer()); // does nothing
 	}
 	// Append a value to j07
+	// CWG issue 1996
 	json::array_type& arr{ s07 };
 	arr.push_back(json{ 2 });
 	slice s08{ j08 };
