@@ -1383,22 +1383,25 @@ constexpr basic_const_json_slice operator[](const key_char_type* ks) const;
 namespace std {
   enum class json_errc : <i>unspecified</i> {
     // invalid access
-    not_null                = <i>see below</i>,
-    not_boolean             = <i>see below</i>,
-    not_number              = <i>see below</i>,
-    not_integer             = <i>see below</i>,
-    not_uinteger            = <i>see below</i>,
-    not_string              = <i>see below</i>,
-    not_array               = <i>see below</i>,
-    not_object              = <i>see below</i>,
-    nonarray_indexing       = <i>see below</i>,
-    nonobject_indexing      = <i>see below</i>,
-    key_not_found           = <i>see below</i>,
+    is_empty                 = <i>see below</i>,
+    is_undefined             = <i>see below</i>,
+    not_null                 = <i>see below</i>,
+    not_boolean              = <i>see below</i>,
+    not_number               = <i>see below</i>,
+    not_integer              = <i>see below</i>,
+    not_uinteger             = <i>see below</i>,
+    not_string               = <i>see below</i>,
+    not_array                = <i>see below</i>,
+    not_object               = <i>see below</i>,
+    nonarray_indexing        = <i>see below</i>,
+    nonobject_indexing       = <i>see below</i>,
+    key_not_found            = <i>see below</i>,
 
     // invalid modification
-    not_undefined_or_null   = <i>see below</i>,
-    not_undefined_or_number = <i>see below</i>,
-    not_undefined_or_string = <i>see below</i>,
+    not_undefined_or_null    = <i>see below</i>,
+    not_undefined_or_boolean = <i>see below</i>,
+    not_undefined_or_number  = <i>see below</i>,
+    not_undefined_or_string  = <i>see below</i>,
   };
 }
 </pre>
