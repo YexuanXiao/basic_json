@@ -874,12 +874,13 @@ namespace bizwen
 			return v;
 		}
 
-		constexpr basic_json_slice operator[](array_type::size_type pos)
+		template<std::integral T>
+		constexpr basic_json_slice operator[](T pos)
 		{
 			if (!array())
 				throw json_error(json_errc::nonarray_indexing);
 
-			auto const& a = *static_cast<array_type const*>(stor().arr_);
+			auto& a = *static_cast<array_type*>(stor().arr_);
 
 			return a[pos];
 		}
@@ -1075,7 +1076,7 @@ namespace bizwen
 
 		constexpr auto as_array()
 		{
-			constexpr auto node_to_slice = [](node_type const& node) static noexcept {
+			constexpr auto node_to_slice = [](node_type& node) static noexcept {
 				return basic_json_slice{ node };
 			};
 			return static_cast<array_type&>(*this) | std::views::transform(node_to_slice);
@@ -1085,7 +1086,7 @@ namespace bizwen
 
 		constexpr auto as_object()
 		{
-			constexpr auto pair_node_to_slice = [](map_node_type const& pair) static noexcept {
+			constexpr auto pair_node_to_slice = [](map_node_type& pair) static noexcept {
 				auto& [key, value]{ pair };
 				return std::pair<key_string_type const&, basic_json_slice>{ key, value };
 			};
