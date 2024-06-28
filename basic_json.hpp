@@ -94,28 +94,12 @@ namespace bizwen
 		not_undefined_or_array,
 		not_undefined_or_object,
 		// for deserializer
-		unsupported_option,
-		unexpect_token,
-		unexpect_comment,
-		unexpect_undefined,
-		missing_square_bracket,
-		missing_brace,
-		missing_double_quote,
+		syntax_error,
 		number_overflow,
-		number_underflow,
-		integer_overflow,
-		integer_underflow,
-		uinteger_overflow,
-		illegal_character,
-		too_deep,
-		too_large,
 		// for serializer
 		unexpect_undefined,
 		number_nan,
-		number_inf,
-		// for reflector
-		unexpect_null,
-		unexpect_type,
+		number_inf
 	};
 
 	class json_error: public std::runtime_error
@@ -129,7 +113,7 @@ namespace bizwen
 
 		json_errc code() const noexcept { return code_; }
 
-		const char* what() const override
+		const char* what() const noexcept override
 		{
 			switch (code_)
 			{
@@ -842,7 +826,7 @@ namespace bizwen
 			auto e = undefined();
 
 			if (!object() && !e)
-				throw json_error(json::errc::nonobject_indexing);
+				throw json_error(json_errc::nonobject_indexing);
 
 			if (e)
 				allocate_object();
@@ -862,7 +846,7 @@ namespace bizwen
 			auto e = undefined();
 
 			if (!object() && !e)
-				throw json_error(json::errc::nonobject_indexing);
+				throw json_error(json_errc::nonobject_indexing);
 
 			if (e)
 				allocate_object();
@@ -1681,7 +1665,7 @@ namespace bizwen
 					auto last = rarr.end();
 					for (; first != last; ++first)
 					{
-						basic_json temp{ lhs.node_.get_allocator() };
+						basic_json temp{ lhs.get_allocator_ref() };
 						clone_node(temp.node_, *first);
 						larr.push_back(std::move(temp));
 					}
