@@ -815,9 +815,9 @@ namespace bizwen
 	public:
 		using base_type::operator[];
 
-		constexpr void clear() noexcept
+		constexpr void reset() noexcept
 		{
-			json_type::clear_node(*node_);
+			json_type::reset_node(*node_);
 		}
 
 		constexpr basic_json_slice operator[](key_string_type const& k)
@@ -1175,7 +1175,7 @@ namespace bizwen
 			return node_.stor_;
 		}
 
-		static constexpr void clear_node(node_type& node) noexcept
+		static constexpr void reset_node(node_type& node) noexcept
 		{
 			auto& s = node.stor_;
 
@@ -1195,7 +1195,7 @@ namespace bizwen
 				for (auto&& i : *p)
 				{
 					auto&& json = basic_json(std::move(i));
-					json.clear();
+					json.reset();
 				}
 
 				auto ator = array_ator(node.get_allocator_ref());
@@ -1210,7 +1210,7 @@ namespace bizwen
 				for (auto&& [_, v] : *p)
 				{
 					auto&& json = basic_json(std::move(v));
-					json.clear();
+					json.reset();
 				}
 
 				auto ator = object_ator(node.get_allocator_ref());
@@ -1228,9 +1228,9 @@ namespace bizwen
 			node.kind_ = kind_t{};
 		}
 
-		constexpr void clear() noexcept
+		constexpr void reset() noexcept
 		{
-			clear_node(node_);
+			reset_node(node_);
 		}
 
 		struct rollbacker_array_part_
@@ -1257,7 +1257,7 @@ namespace bizwen
 
 				for (auto begin = array.begin(); begin != sentry; ++begin)
 				{
-					basic_json::clear_node(*begin);
+					basic_json::reset_node(*begin);
 				}
 			}
 		};
@@ -1291,7 +1291,7 @@ namespace bizwen
 
 				for (auto begin = array.begin(); begin != end; ++begin)
 				{
-					basic_json::clear_node(*begin);
+					basic_json::reset_node(*begin);
 				}
 			}
 		};
@@ -1323,7 +1323,7 @@ namespace bizwen
 				for (auto begin = object.begin(); begin != end; ++begin)
 				{
 					auto&& [key, value] = *begin;
-					basic_json::clear_node(value);
+					basic_json::reset_node(value);
 				}
 			}
 		};
@@ -1396,7 +1396,7 @@ namespace bizwen
 				else
 				{
 					clone(rhs);
-					rhs.clear();
+					rhs.reset();
 				}
 			}
 		}
@@ -1416,7 +1416,7 @@ namespace bizwen
 		{
 			if (this != std::addressof(rhs))
 			{
-				clear();
+				reset();
 				if constexpr (!is_ator_stateless_ && is_pocca_)
 				{
 					node_.get_allocator_ref() = rhs.node_.get_allocator_ref();
@@ -1446,9 +1446,9 @@ namespace bizwen
 				}
 				else
 				{
-					clear();
+					reset();
 					clone(rhs);
-					rhs.clear();
+					rhs.reset();
 				}
 			}
 
@@ -1715,7 +1715,7 @@ namespace bizwen
 	public:
 		constexpr ~basic_json() noexcept
 		{
-			clear();
+			reset();
 		}
 
 		constexpr slice_type slice() noexcept
