@@ -97,7 +97,6 @@ namespace bizwen
 		syntax_error,
 		number_overflow,
 		// for serializer
-		unexpect_undefined,
 		number_nan,
 		number_inf
 	};
