@@ -8,7 +8,7 @@ Revision: 0
 Status: D
 Audience: LEWG
 Group: WG21
-Date: 2024-02-09
+Date: 2024-07-14
 Markup Shorthands: markdown on
 Markup Shorthands: biblio yes
 ED: https://github.com/YexuanXiao/basic_json/blob/master/proposal.bs
@@ -42,7 +42,7 @@ Therefore, this proposal aims to provide a minimal JSON support library for C++,
 - It does not have any external dependencies, and can be easily integrated into any C++ project, without affecting the existing code or environment.
 - It has a simple and consistent interface, which follows the existing C++ standard library conventions and styles, and can be easily learned and used by C++ programmers.
 - It has a sufficient level of features, performance, and compatibility, which can cover most common use cases of JSON data, and can work with any conforming C++ compiler and platform.
-- It is easy to implement, with only about 1500 lines of code, which avoids too much implementation details and problems.
+- It is easy to implement, with only about 2200 lines of code, which avoids too much implementation details and problems.
 
 # Proposal
 
@@ -110,7 +110,7 @@ Trivial copyability of `basic_json_node` depends on `Allocator`. If `Allocator` 
 `basic_json` is a `semiregular` type that represents ownership of a JSON structure. It can be implemented as storing a `basic_json_node` as its only non-static data member, which makes `basic_json` and `basic_json_node` have the same size.
 Its destructor is responsible for destructing all nodes and deallocate all dynamic storage held by the object. The copy constructor and copy assignment operator copy the JSON. The swap operation is provided as both a hidden friend function and a non-static member function.
 
-The reason why the allocator is a template parameter of `basic_json_node` rather than `basic_json` is that `basic_json` must have the same size as `basic_json_node`, so `char` is usually used to instantiate the allocator (`void` type can be used after LWG issue [[3917]] is resolved),
+The reason why the allocator is a template parameter of `basic_json_node` rather than `basic_json` is that `basic_json` must have the same size as `basic_json_node`, so `std::byte` is usually used to instantiate the allocator (`void` type can be used after LWG issue [[3917]] is resolved),
 and then rebind is used to allocate storage. Once a specialization of `basic_json_node` is available, `basic_json` can be instantiated. `basic_json` has six template parameters: `Node`, `String`, `Array`, `Object`, `HasInteger`, `HasUInteger`.
 
 `Node` must be a specialization of `basic_json_node`, and since `basic_json_node` provides type aliases to obtain the template arguments, `basic_json` can extract these type aliases, rewrite the specialization of `basic_json_node`, and compare it with `Node` to ensure this.
@@ -286,7 +286,7 @@ namespace std {
   inline constexpr nulljson_t nulljson;
 
   template<class Number = double, class Integer = long long, class UInteger = unsigned long long,
-           class Allocator = allocator<char>>
+           class Allocator = allocator<byte>>
     class basic_json_node;
 
   template<class Node = basic_json_node<>, class String = string, class Array = vector<Node>,
@@ -374,7 +374,7 @@ namespace std {
 <pre highlight="c++">
 namespace std {
   template&lt;class Number = double, class Integer = long long, class UInteger = unsigned long long,
-           class Allocator = allocator<char>>
+           class Allocator = allocator<byte>>
     class basic_json_node {
     private:
       using <i>void-ptr</i> = allocator_traits<Allocator>::void_pointer;   // exposition only

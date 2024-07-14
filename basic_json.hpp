@@ -2,6 +2,7 @@
 #define BIZWEN_BASIC_JSON_HPP
 
 #include <cassert>
+#include <cstddef>
 #include <iterator>
 #include <map>
 #include <memory>
@@ -27,9 +28,9 @@ namespace bizwen
 
 	// https://cplusplus.github.io/LWG/issue3917
 	// since the types of string, array and map are unknown at this point,
-	// memory allocation can only be done by instantiating char.
+	// memory allocation can only be done by instantiating with std::byte.
 	template <typename Number = double,
-	    typename Integer = long long, typename UInteger = unsigned long long, typename Allocator = std::allocator<char>>
+	    typename Integer = long long, typename UInteger = unsigned long long, typename Allocator = std::allocator<std::byte>>
 	class basic_json_node;
 
 	template <typename Node = basic_json_node<>, typename String = std::string,
@@ -121,7 +122,7 @@ namespace bizwen
 
 		json_errc code() const noexcept { return code_; }
 
-		const char* what() const noexcept override
+		char const* what() const noexcept override
 		{
 			switch (code_)
 			{
