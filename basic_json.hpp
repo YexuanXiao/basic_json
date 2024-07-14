@@ -898,7 +898,8 @@ namespace bizwen
 
 			constexpr auto operator[](key_char_type const* k) const -> const_slice_type;
 
-			constexpr auto operator[](array_type::size_type pos) const -> const_slice_type;
+			template <std::integral T>
+			constexpr auto operator[](T pos) const -> const_slice_type;
 
 			constexpr auto as_array() const
 			{
@@ -1044,7 +1045,8 @@ namespace bizwen
 		    typename Array,
 		    typename Object,
 		    bool HasInteger, bool HasUInteger>
-		constexpr auto basic_json_slice_common_base<Node, String, Array, Object, HasInteger, HasUInteger>::operator[](array_type::size_type pos) const -> const_slice_type
+		template <std::integral T>
+		constexpr auto basic_json_slice_common_base<Node, String, Array, Object, HasInteger, HasUInteger>::operator[](T pos) const -> const_slice_type
 		{
 			if (!array())
 				throw json_error(json_errc::nonarray_indexing);

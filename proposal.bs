@@ -785,7 +785,8 @@ namespace std {
       constexpr explicit operator const object_type&() const&;
       constexpr explicit operator integer_type() const;
       constexpr explicit operator uinteger_type() const;
-      constexpr basic_const_json_slice operator[](array_type::size_type pos) const;
+      template&lt;integral I>
+        constexpr basic_const_json_slice operator[](I pos) const;
       constexpr basic_const_json_slice operator[](const key_string_type& k) const;
       template&lt;class KeyStrLike>
         constexpr basic_const_json_slice operator[](const KeyStrLike& k) const;
@@ -800,7 +801,8 @@ namespace std {
       constexpr basic_json_slice& operator=(const char_type* str);
       template&lt;class StrLike>
         constexpr basic_json_slice& operator=(const StrLike& str);
-      constexpr basic_json_slice operator[](array_type::size_type pos);
+      template&lt;integral I>
+        constexpr basic_json_slice operator[](I pos);
       constexpr basic_json_slice operator[](const key_string_type& k);
       template&lt;class KeyStrLike>
         constexpr basic_json_slice operator[](const KeyStrLike& k);
@@ -886,7 +888,8 @@ constexpr explicit operator const array_type&() const&;
 constexpr explicit operator const object_type&() const&;
 constexpr explicit operator integer_type() const;
 constexpr explicit operator uinteger_type() const;
-constexpr basic_const_json_slice operator[](array_type::size_type pos) const;
+template&lt;integral I>
+  constexpr basic_const_json_slice operator[](I pos) const;
 constexpr basic_const_json_slice operator[](const key_string_type& k) const;
 template&lt;class KeyStrLike>
   constexpr basic_const_json_slice operator[](const KeyStrLike& k) const;
@@ -1019,7 +1022,8 @@ template<class StrLike>
     - Otherwise, the exception thrown by the allocation, construction, or assignment of the `String`.
 
 ```cpp
-constexpr basic_json_slice operator[](array_type::size_type pos);
+template<integral I>
+  constexpr basic_json_slice operator[](I pos);
 ```
 
 29. *Preconditions*: `*this` is valid. If the referenced node is in the array state, `pos` is less than the length of the stored dynamic array.
@@ -1116,7 +1120,8 @@ namespace std {
       constexpr explicit operator const object_type&() const&;
       constexpr explicit operator integer_type() const;
       constexpr explicit operator uinteger_type() const;
-      constexpr basic_const_json_slice operator[](array_type::size_type pos) const;
+      template&lt;integral I>
+        constexpr basic_const_json_slice operator[](I pos) const;
       constexpr basic_const_json_slice operator[](const key_string_type& k) const;
       template&lt;class KeyStrLike>
         constexpr basic_const_json_slice operator[](const KeyStrLike& k) const;
@@ -1344,7 +1349,8 @@ constexpr explicit operator uinteger_type() const;
 47. *Throws*: A `json_error` exception constructed from `json_errc::not_uinteger` if the referenced node is not in the unsigned integral state.
 
 ```cpp
-constexpr basic_const_json_slice operator[](array_type::size_type pos) const;
+template<integral I>
+  constexpr basic_const_json_slice operator[](I pos) const;
 ```
 
 48. *Preconditions*: `*this` is valid. If the referenced node is in the array state, `pos` is less than the length of the stored dynamic array.
