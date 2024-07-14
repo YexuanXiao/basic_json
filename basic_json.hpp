@@ -2,6 +2,7 @@
 #define BIZWEN_BASIC_JSON_HPP
 
 #include <cassert>
+#include <cstddef>
 #include <iterator>
 #include <map>
 #include <memory>
@@ -27,9 +28,9 @@ namespace bizwen
 
 	// https://cplusplus.github.io/LWG/issue3917
 	// since the types of string, array and map are unknown at this point,
-	// memory allocation can only be done by instantiating char.
+	// memory allocation can only be done by instantiating with std::byte.
 	template <typename Number = double,
-	    typename Integer = long long, typename UInteger = unsigned long long, typename Allocator = std::allocator<char>>
+	    typename Integer = long long, typename UInteger = unsigned long long, typename Allocator = std::allocator<std::byte>>
 	class basic_json_node;
 
 	template <typename Node = basic_json_node<>, typename String = std::string,
@@ -46,11 +47,20 @@ namespace bizwen
 		    bool HasInteger, bool HasUInteger>
 		struct basic_json_slice_common_base;
 
-		template <typename T, typename Node>
-		constexpr T* alloc_from_node(Node& node);
+		template <typename Alloc>
+		using ator_void_ptr_t = std::allocator_traits<Alloc>::void_pointer;
+
+		template <typename T, typename Alloc>
+		using ator_rebound_ptr_t = std::allocator_traits<Alloc>::template rebind_traits<T>::pointer;
 
 		template <typename T, typename Node>
-		constexpr void dealloc_from_node(Node& node, T* p) noexcept;
+		using node_ator_rebound_ptr_t = std::allocator_traits<typename Node::allocator_type>::template rebind_traits<T>::pointer;
+
+		template <typename T, typename Node>
+		constexpr node_ator_rebound_ptr_t<T, Node> alloc_from_node(Node& node);
+
+		template <typename T, typename Node>
+		constexpr void dealloc_from_node(Node& node, node_ator_rebound_ptr_t<T, Node> p) noexcept;
 
 		template <typename T, typename Node>
 		struct node_variant_alloc_guard;
@@ -112,7 +122,7 @@ namespace bizwen
 
 		json_errc code() const noexcept { return code_; }
 
-		const char* what() const noexcept override
+		char const* what() const noexcept override
 		{
 			switch (code_)
 			{
@@ -155,9 +165,419 @@ namespace bizwen
 		json_errc code_;
 	};
 
+	namespace detail
+	{
+		template <typename VoidPtr, typename FPoint, typename SInt, typename UInt>
+		class node_storage_variant
+		{
+		private:
+			static_assert(std::floating_point<FPoint>);
+			static_assert(std::signed_integral<SInt>);
+			static_assert(std::unsigned_integral<UInt>);
+
+			template <typename Number, typename Integer, typename UInteger, typename Allocator>
+			friend class bizwen::basic_json_node;
+
+			template <typename Node, typename String,
+			    typename Array,
+			    typename Object,
+			    bool HasInteger, bool HasUInteger>
+			friend class bizwen::basic_json;
+
+			template <typename Node, typename String,
+			    typename Array,
+			    typename Object,
+			    bool HasInteger, bool HasUInteger>
+			friend struct detail::basic_json_slice_common_base;
+
+			template <typename T, typename Node>
+			friend constexpr detail::node_ator_rebound_ptr_t<T, Node> detail::alloc_from_node(Node& node);
+
+			template <typename T, typename Node>
+			friend constexpr void detail::dealloc_from_node(Node& node, detail::node_ator_rebound_ptr_t<T, Node> p) noexcept;
+
+			template <typename T, typename Node>
+			friend struct detail::node_variant_alloc_guard;
+
+			template <typename Node, typename String,
+			    typename Array,
+			    typename Object,
+			    bool HasInteger, bool HasUInteger>
+			friend class bizwen::basic_const_json_slice;
+
+			template <typename Node, typename String,
+			    typename Array,
+			    typename Object,
+			    bool HasInteger, bool HasUInteger>
+			friend class bizwen::basic_json_slice;
+
+			enum class kind_t : unsigned char
+			{
+				undefined,
+				null,
+				true_value,
+				false_value,
+				number,
+				integer,
+				uinteger,
+				string,
+				array,
+				object
+			};
+
+			union
+			{
+				VoidPtr str_;
+				VoidPtr arr_;
+				VoidPtr obj_;
+				FPoint num_;
+				SInt int_;
+				UInt uint_;
+			};
+			kind_t kind_{};
+
+			constexpr void copy_replace_union(node_storage_variant const& other) noexcept
+			{
+				// pre: kind_ == other.kind_, no non-trivial variant member of the union constructed
+				switch (kind_)
+				{
+				case kind_t::string:
+					std::construct_at(std::addressof(str_), other.str_);
+					break;
+				case kind_t::array:
+					std::construct_at(std::addressof(arr_), other.arr_);
+					break;
+				case kind_t::object:
+					std::construct_at(std::addressof(obj_), other.obj_);
+					break;
+				case kind_t::number:
+					std::construct_at(&num_, other.num_);
+					break;
+				case kind_t::integer:
+					std::construct_at(&int_, other.int_);
+					break;
+				case kind_t::uinteger:
+					std::construct_at(&uint_, other.uint_);
+					break;
+				}
+			}
+
+			constexpr void move_replace_union(node_storage_variant const& other) noexcept
+			{
+				// pre: kind_ == other.kind_, no non-trivial variant member of the union constructed
+				switch (kind_)
+				{
+				case kind_t::string:
+					std::construct_at(std::addressof(str_), std::move(other.str_));
+					break;
+				case kind_t::array:
+					std::construct_at(std::addressof(arr_), std::move(other.arr_));
+					break;
+				case kind_t::object:
+					std::construct_at(std::addressof(obj_), std::move(other.obj_));
+					break;
+				case kind_t::number:
+					std::construct_at(&num_, other.num_);
+					break;
+				case kind_t::integer:
+					std::construct_at(&int_, other.int_);
+					break;
+				case kind_t::uinteger:
+					std::construct_at(&uint_, other.uint_);
+					break;
+				}
+			}
+
+			constexpr void destroy_union() noexcept
+			{
+				// pre: kind_ indicates the status of the union
+				switch (kind_)
+				{
+				case kind_t::string:
+					str_.~VoidPtr();
+					break;
+				case kind_t::array:
+					arr_.~VoidPtr();
+					break;
+				case kind_t::object:
+					obj_.~VoidPtr();
+					break;
+				}
+			}
+
+			constexpr void set_undefined() noexcept
+			{
+				destroy_union();
+				kind_ = kind_t::undefined;
+			}
+
+			constexpr void set_null() noexcept
+			{
+				destroy_union();
+				kind_ = kind_t::null;
+			}
+
+			constexpr void set_bool(bool b) noexcept
+			{
+				destroy_union();
+				kind_ = b ? kind_t::true_value : kind_t::false_value;
+			}
+
+			constexpr void set_num(FPoint x) noexcept
+			{
+				if (kind_ == kind_t::number)
+					num_ = x;
+				else
+				{
+					destroy_union();
+					kind_ = kind_t::number;
+					std::construct_at(&num_, x);
+				}
+			}
+
+			constexpr void set_int(SInt n) noexcept
+			{
+				if (kind_ == kind_t::integer)
+					int_ = n;
+				else
+				{
+					destroy_union();
+					kind_ = kind_t::integer;
+					std::construct_at(&int_, n);
+				}
+			}
+
+			constexpr void set_uint(UInt n) noexcept
+			{
+				if (kind_ == kind_t::uinteger)
+					num_ = n;
+				else
+				{
+					destroy_union();
+					kind_ = kind_t::uinteger;
+					std::construct_at(&uint_, n);
+				}
+			}
+
+			constexpr void set_str_ptr(VoidPtr vp) noexcept
+			{
+				if (kind_ == kind_t::string)
+					str_ = vp;
+				else
+				{
+					destroy_union();
+					kind_ = kind_t::string;
+					std::construct_at(std::addressof(str_), std::move(vp));
+				}
+			}
+
+			constexpr void set_arr_ptr(VoidPtr vp) noexcept
+			{
+				if (kind_ == kind_t::array)
+					arr_ = vp;
+				else
+				{
+					destroy_union();
+					kind_ = kind_t::array;
+					std::construct_at(std::addressof(arr_), std::move(vp));
+				}
+			}
+
+			constexpr void set_obj_ptr(VoidPtr vp) noexcept
+			{
+				if (kind_ == kind_t::object)
+					obj_ = vp;
+				else
+				{
+					destroy_union();
+					kind_ = kind_t::object;
+					std::construct_at(std::addressof(obj_), std::move(vp));
+				}
+			}
+
+		public:
+			constexpr node_storage_variant() noexcept {}
+
+			// clang-format off
+			node_storage_variant(node_storage_variant const&) noexcept
+			    requires std::is_trivially_copy_constructible_v<VoidPtr> = default;
+			// clang-format on
+
+			constexpr node_storage_variant(node_storage_variant const& other) noexcept
+			    : kind_{ other.kind_ }
+			{
+				copy_replace_union(other);
+			}
+
+			// clang-format off
+			node_storage_variant(node_storage_variant&&) noexcept
+			    requires std::is_trivially_move_constructible_v<VoidPtr> = default;
+			// clang-format on
+
+			constexpr node_storage_variant(node_storage_variant&& other) noexcept
+			    : kind_{ other.kind_ }
+			{
+				move_replace_union(std::move(other));
+			}
+
+			// clang-format off
+			node_storage_variant& operator=(node_storage_variant const&) noexcept
+			    requires std::is_trivially_copy_constructible_v<VoidPtr> &&
+			             std::is_trivially_copy_assignable_v<VoidPtr> &&
+					     std::is_trivially_destructible_v<VoidPtr> = default;
+			// clang-format on
+
+			constexpr node_storage_variant& operator=(node_storage_variant const& other) noexcept
+			{
+				if (kind_ == other.kind_)
+				{
+					switch (kind_)
+					{
+					case kind_t::string:
+						str_ = other.str_;
+						break;
+					case kind_t::array:
+						arr_ = other.arr_;
+						break;
+					case kind_t::object:
+						obj_ = other.obj_;
+						break;
+					case kind_t::number:
+						num_ = other.num_;
+						break;
+					case kind_t::integer:
+						int_ = other.int_;
+						break;
+					case kind_t::uinteger:
+						uint_ = other.uint_;
+						break;
+					}
+				}
+				else
+				{
+					destroy_union();
+					kind_ = other.kind_;
+					copy_replace_union(other);
+				}
+				return *this;
+			}
+
+			// clang-format off
+			node_storage_variant& operator=(node_storage_variant&&) noexcept
+			    requires std::is_trivially_move_constructible_v<VoidPtr> &&
+			             std::is_trivially_move_assignable_v<VoidPtr> &&
+					     std::is_trivially_destructible_v<VoidPtr> = default;
+			// clang-format on
+
+			constexpr node_storage_variant& operator=(node_storage_variant&& other) noexcept
+			{
+				if (kind_ == other.kind_)
+				{
+					switch (kind_)
+					{
+					case kind_t::string:
+						str_ = std::move(other.str_);
+						break;
+					case kind_t::array:
+						arr_ = std::move(other.arr_);
+						break;
+					case kind_t::object:
+						obj_ = std::move(other.obj_);
+						break;
+					case kind_t::number:
+						num_ = other.num_;
+						break;
+					case kind_t::integer:
+						int_ = other.int_;
+						break;
+					case kind_t::uinteger:
+						uint_ = other.uint_;
+						break;
+					}
+				}
+				else
+				{
+					destroy_union();
+					kind_ = other.kind_;
+					move_replace_union(other);
+				}
+				return *this;
+			}
+
+			// clang-format off
+			~node_storage_variant() noexcept requires std::is_trivially_destructible_v<VoidPtr> = default;
+			// clang-format on
+
+			constexpr ~node_storage_variant() noexcept
+			{
+				destroy_union();
+			}
+		};
+
+#if __has_cpp_attribute(no_unique_address)
+#define BIZWEN_NO_UNIQUE_ADDRESS [[no_unique_address]]
+#elif __has_cpp_attribute(msvc::no_unique_address)
+#define BIZWEN_NO_UNIQUE_ADDRESS [[msvs::no_unique_address]]
+#endif
+
+#ifdef BIZWEN_NO_UNIQUE_ADDRESS
+		template <typename Number,
+		    typename Integer, typename UInteger, typename Allocator>
+		struct basic_json_node_storage
+		{
+			BIZWEN_NO_UNIQUE_ADDRESS Allocator alloc_;
+			node_storage_variant<detail::ator_void_ptr_t<Allocator>, Number, Integer, UInteger> var_;
+
+			constexpr Allocator& get_allocator_ref() noexcept
+			{
+				return alloc_;
+			}
+			constexpr Allocator const& get_allocator_ref() const noexcept
+			{
+				return alloc_;
+			}
+		};
+#else
+		template <typename Number,
+		    typename Integer, typename UInteger, typename Allocator>
+		struct basic_json_node_storage
+		{
+			Allocator alloc_;
+			node_storage_variant<detail::ator_void_ptr_t<Allocator>, Number, Integer, UInteger> var_;
+
+			constexpr Allocator& get_allocator_ref() noexcept
+			{
+				return alloc_;
+			}
+			constexpr Allocator const& get_allocator_ref() const noexcept
+			{
+				return alloc_;
+			}
+		};
+
+		template <typename Number,
+		    typename Integer, typename UInteger, typename Allocator>
+		    requires std::is_class_v<Allocator> && (!std::is_final_v<Allocator>)
+		struct basic_json_node_storage<Number, Integer, UInteger, Allocator>: Allocator
+		{
+			node_storage_variant<detail::ator_void_ptr_t<Allocator>, Number, Integer, UInteger> var_;
+
+			constexpr Allocator& get_allocator_ref() noexcept
+			{
+				return (Allocator&)(*this);
+			}
+			constexpr Allocator const& get_allocator_ref() const noexcept
+			{
+				return (Allocator const&)(*this);
+			}
+		};
+#endif
+#undef BIZWEN_NO_UNIQUE_ADDRESS
+	} // namespace detail
+
 	template <typename Number,
 	    typename Integer, typename UInteger, typename Allocator>
-	class basic_json_node: protected Allocator
+	class basic_json_node
 	{
 	public:
 		using number_type = Number;
@@ -166,10 +586,6 @@ namespace bizwen
 		using allocator_type = Allocator;
 
 	private:
-		static_assert(std::floating_point<number_type>);
-		static_assert(std::signed_integral<integer_type>);
-		static_assert(std::unsigned_integral<uinteger_type>);
-
 		template <typename Node, typename String,
 		    typename Array,
 		    typename Object,
@@ -183,10 +599,10 @@ namespace bizwen
 		friend struct detail::basic_json_slice_common_base;
 
 		template <typename T, typename Node>
-		friend constexpr T* detail::alloc_from_node(Node& node);
+		friend constexpr detail::node_ator_rebound_ptr_t<T, Node> detail::alloc_from_node(Node& node);
 
 		template <typename T, typename Node>
-		friend constexpr void detail::dealloc_from_node(Node& node, T* p) noexcept;
+		friend constexpr void detail::dealloc_from_node(Node& node, detail::node_ator_rebound_ptr_t<T, Node> p) noexcept;
 
 		template <typename T, typename Node>
 		friend struct detail::node_variant_alloc_guard;
@@ -203,51 +619,41 @@ namespace bizwen
 		    bool HasInteger, bool HasUInteger>
 		friend class basic_json_slice;
 
-		enum class kind_t : unsigned char
-		{
-			undefined,
-			null,
-			true_value,
-			false_value,
-			number,
-			integer,
-			uinteger,
-			string,
-			array,
-			object
-		};
+		using stor_var_t = detail::node_storage_variant<detail::ator_void_ptr_t<Allocator>, Number, Integer, UInteger>;
+		using kind_t = stor_var_t::kind_t;
 
-		union stor_t
-		{
-			void* str_;
-			void* arr_;
-			void* obj_;
-			number_type num_;
-			integer_type int_;
-			uinteger_type uint_;
-		};
-
-		stor_t stor_{};
-		kind_t kind_{};
+		detail::basic_json_node_storage<Number, Integer, UInteger, Allocator> stor_;
 
 		constexpr Allocator& get_allocator_ref() noexcept
 		{
-			return (Allocator&)(*this);
+			return stor_.get_allocator_ref();
 		}
 		constexpr const Allocator& get_allocator_ref() const noexcept
 		{
-			return (const Allocator&)(*this);
+			return stor_.get_allocator_ref();
+		}
+
+		constexpr kind_t kind() const noexcept
+		{
+			return stor_.var_.kind_;
+		}
+
+		constexpr stor_var_t& stor_var() noexcept
+		{
+			return stor_.var_;
+		}
+		constexpr const stor_var_t& stor_var() const noexcept
+		{
+			return stor_.var_;
 		}
 
 	public:
-		constexpr basic_json_node() noexcept(std::is_nothrow_default_constructible_v<Allocator>)
-		    requires std::default_initializable<Allocator>
-		    : Allocator()
-		{
-		}
+		// clang-format off
+		constexpr basic_json_node() requires std::default_initializable<Allocator> = default;
+		// clang-format on
 
 		constexpr explicit basic_json_node(Allocator const& a) noexcept
-		    : Allocator(a)
+		    : stor_{ { a } }
 		{
 		}
 
@@ -314,7 +720,11 @@ namespace bizwen
 		private:
 			using traits_t = std::allocator_traits<allocator_type>;
 			using kind_t = node_type::kind_t;
-			using stor_t = node_type::stor_t;
+			using stor_var_t = node_type::stor_var_t;
+
+			using str_ptr_t = node_ator_rebound_ptr_t<string_type, node_type>;
+			using arr_ptr_t = node_ator_rebound_ptr_t<array_type, node_type>;
+			using obj_ptr_t = node_ator_rebound_ptr_t<object_type, node_type>;
 
 			friend json_type;
 
@@ -325,12 +735,12 @@ namespace bizwen
 				if (!node_)
 					throw json_error(json_errc::is_empty);
 
-				return node_->kind_;
+				return node_->kind();
 			}
 
-			constexpr stor_t const& stor() const noexcept
+			constexpr stor_var_t const& stor_var() const noexcept
 			{
-				return node_->stor_;
+				return node_->stor_var();
 			}
 
 		public:
@@ -416,7 +826,7 @@ namespace bizwen
 			constexpr explicit operator number_type() const
 			{
 				auto k = kind();
-				auto s = stor();
+				auto s = stor_var();
 
 				if (k == kind_t::number)
 					return s.num_;
@@ -441,7 +851,7 @@ namespace bizwen
 				if (!string())
 					throw json_error(json_errc::not_string);
 
-				return *static_cast<string_type const*>(stor().str_);
+				return *static_cast<str_ptr_t>(stor_var().str_);
 			}
 
 			constexpr explicit operator array_type const&() const&
@@ -449,7 +859,7 @@ namespace bizwen
 				if (!array())
 					throw json_error(json_errc::not_array);
 
-				return *static_cast<array_type const*>(stor().arr_);
+				return *static_cast<arr_ptr_t>(stor_var().arr_);
 			}
 
 			constexpr explicit operator object_type const&() const&
@@ -457,7 +867,7 @@ namespace bizwen
 				if (!object())
 					throw json_error(json_errc::not_object);
 
-				return *static_cast<object_type const*>(stor().obj_);
+				return *static_cast<obj_ptr_t>(stor_var().obj_);
 			}
 
 			constexpr explicit operator integer_type() const
@@ -466,7 +876,7 @@ namespace bizwen
 				if (!integer())
 					throw json_error(json_errc::not_integer);
 
-				return stor().int_;
+				return stor_var().int_;
 			}
 
 			constexpr explicit operator uinteger_type() const
@@ -475,7 +885,7 @@ namespace bizwen
 				if (!uinteger())
 					throw json_error(json_errc::not_uinteger);
 
-				return stor().uint_;
+				return stor_var().uint_;
 			}
 
 			// defined after the class body of basic_const_json_slice
@@ -489,7 +899,8 @@ namespace bizwen
 
 			constexpr auto operator[](key_char_type const* k) const -> const_slice_type;
 
-			constexpr auto operator[](array_type::size_type pos) const -> const_slice_type;
+			template <std::integral T>
+			constexpr auto operator[](T pos) const -> const_slice_type;
 
 			constexpr auto as_array() const
 			{
@@ -577,7 +988,7 @@ namespace bizwen
 			if (!object())
 				throw json_error(json_errc::nonobject_indexing);
 
-			auto& o = *static_cast<object_type*>(stor().obj_);
+			auto const& o = *static_cast<obj_ptr_t>(stor_var().obj_);
 			auto i = o.find(k);
 
 			if (i == o.end())
@@ -600,7 +1011,7 @@ namespace bizwen
 			if (!object())
 				throw json_error(json_errc::nonobject_indexing);
 
-			auto& o = *static_cast<object_type*>(stor().obj_);
+			auto const& o = *static_cast<obj_ptr_t>(stor_var().obj_);
 			auto i = o.find(k);
 
 			if (i == o.end())
@@ -620,7 +1031,7 @@ namespace bizwen
 			if (!object())
 				throw json_error(json_errc::nonobject_indexing);
 
-			auto& o = *static_cast<object_type*>(stor().obj_);
+			auto const& o = *static_cast<obj_ptr_t>(stor_var().obj_);
 			auto i = o.find(k);
 
 			if (i == o.end())
@@ -635,36 +1046,35 @@ namespace bizwen
 		    typename Array,
 		    typename Object,
 		    bool HasInteger, bool HasUInteger>
-		constexpr auto basic_json_slice_common_base<Node, String, Array, Object, HasInteger, HasUInteger>::operator[](array_type::size_type pos) const -> const_slice_type
+		template <std::integral T>
+		constexpr auto basic_json_slice_common_base<Node, String, Array, Object, HasInteger, HasUInteger>::operator[](T pos) const -> const_slice_type
 		{
 			if (!array())
 				throw json_error(json_errc::nonarray_indexing);
 
-			auto& a = *static_cast<array_type*>(stor().arr_);
+			auto const& a = *static_cast<arr_ptr_t>(stor_var().arr_);
 
 			return a[pos];
 		}
 
 		template <typename T, typename Node>
-		constexpr T* alloc_from_node(Node& node)
+		constexpr node_ator_rebound_ptr_t<T, Node> alloc_from_node(Node& node)
 		{
 			using ator_t = std::allocator_traits<typename Node::allocator_type>::template rebind_alloc<T>;
-			return std::to_address(ator_t(node.get_allocator_ref()).allocate(1));
+			return ator_t(node.get_allocator_ref()).allocate(1);
 		}
 
 		template <typename T, typename Node>
-		constexpr void dealloc_from_node(Node& node, T* p) noexcept
+		constexpr void dealloc_from_node(Node& node, node_ator_rebound_ptr_t<T, Node> p) noexcept
 		{
 			using ator_t = std::allocator_traits<typename Node::allocator_type>::template rebind_alloc<T>;
-			using ator_ptr = std::allocator_traits<ator_t>::pointer;
-			using ator_ptr_traits = std::pointer_traits<ator_ptr>;
-			return ator_t(node.get_allocator_ref()).deallocate(ator_ptr_traits::pointer_to(*p), 1);
+			return ator_t(node.get_allocator_ref()).deallocate(p, 1);
 		}
 
 		template <typename T, typename Node>
 		struct node_variant_alloc_guard
 		{
-			T* ptr;
+			node_ator_rebound_ptr_t<T, Node> ptr;
 			Node& node;
 
 			node_variant_alloc_guard(node_variant_alloc_guard const&) = delete;
@@ -680,7 +1090,7 @@ namespace bizwen
 				ptr = nullptr;
 			}
 
-			constexpr T* get() noexcept
+			constexpr node_ator_rebound_ptr_t<T, Node> get() noexcept
 			{
 				assert(ptr);
 
@@ -690,7 +1100,7 @@ namespace bizwen
 			constexpr ~node_variant_alloc_guard()
 			{
 				if (ptr)
-					detail::dealloc_from_node(node, ptr);
+					detail::dealloc_from_node<T>(node, ptr);
 			}
 		};
 	}
@@ -704,6 +1114,10 @@ namespace bizwen
 	private:
 		using base_type = detail::basic_json_slice_common_base<Node, String, Array, Object, HasInteger, HasUInteger>;
 		using base_type::node_;
+
+		using str_ptr_t = detail::node_ator_rebound_ptr_t<typename base_type::string_type, Node>;
+		using arr_ptr_t = detail::node_ator_rebound_ptr_t<typename base_type::array_type, Node>;
+		using obj_ptr_t = detail::node_ator_rebound_ptr_t<typename base_type::object_type, Node>;
 
 	public:
 		using typename base_type::allocator_type;
@@ -720,13 +1134,13 @@ namespace bizwen
 
 		using base_type::array;
 		using base_type::boolean;
-		using base_type::undefined;
 		using base_type::integer;
 		using base_type::null;
 		using base_type::number;
 		using base_type::object;
 		using base_type::string;
 		using base_type::uinteger;
+		using base_type::undefined;
 
 		constexpr void swap(basic_json_slice& rhs) noexcept
 		{
@@ -768,7 +1182,7 @@ namespace bizwen
 			if (!string())
 				throw json_error(json_errc::not_string);
 
-			return *static_cast<string_type*>(stor().str_);
+			return *static_cast<str_ptr_t>(stor_var().str_);
 		}
 
 		constexpr explicit operator array_type&() &
@@ -776,7 +1190,7 @@ namespace bizwen
 			if (!array())
 				throw json_error(json_errc::not_array);
 
-			return *static_cast<array_type*>(stor().arr_);
+			return *static_cast<arr_ptr_t>(stor_var().arr_);
 		}
 
 		constexpr explicit operator object_type&() &
@@ -784,12 +1198,12 @@ namespace bizwen
 			if (!object())
 				throw json_error(json_errc::not_object);
 
-			return *static_cast<object_type*>(stor().obj_);
+			return *static_cast<obj_ptr_t>(stor_var().obj_);
 		}
 
 	private:
 		using kind_t = node_type::kind_t;
-		using stor_t = node_type::stor_t;
+		using stor_var_t = node_type::stor_var_t;
 
 		using string_ator = std::allocator_traits<allocator_type>::template rebind_alloc<String>;
 		using string_ator_traits = std::allocator_traits<string_ator>;
@@ -801,15 +1215,14 @@ namespace bizwen
 			detail::node_variant_alloc_guard<object_type, node_type> guard(*node_);
 			auto ator = object_ator(node_->get_allocator_ref());
 			auto rawptr = guard.get();
-			object_ator_traits::construct(ator, rawptr);
-			stor().obj_ = rawptr;
+			object_ator_traits::construct(ator, std::to_address(rawptr));
+			node_->stor_var().set_obj_ptr(rawptr);
 			guard.release();
-			node_->kind_ = kind_t::object;
 		}
 
-		constexpr stor_t& stor() noexcept
+		constexpr stor_var_t& stor_var() noexcept
 		{
-			return node_->stor_;
+			return node_->stor_var();
 		}
 
 	public:
@@ -830,7 +1243,7 @@ namespace bizwen
 			if (e)
 				allocate_object();
 
-			auto& o = *static_cast<object_type*>(stor().obj_);
+			auto& o = *static_cast<obj_ptr_t>(stor_var().obj_);
 			auto [i, _] = o.emplace(k, node_type{ node_->get_allocator_ref() });
 			auto& [_, v] = *i;
 
@@ -850,7 +1263,7 @@ namespace bizwen
 			if (e)
 				allocate_object();
 
-			auto& o = *static_cast<object_type*>(stor().obj_);
+			auto& o = *static_cast<obj_ptr_t>(stor_var().obj_);
 			auto [i, _] = o.emplace(k, node_type{ node_->get_allocator_ref() });
 			auto& [_, v] = *i;
 
@@ -867,20 +1280,20 @@ namespace bizwen
 			if (e)
 				allocate_object();
 
-			auto& o = *static_cast<object_type*>(stor().obj_);
+			auto& o = *static_cast<obj_ptr_t>(stor_var().obj_);
 			auto [i, _] = o.emplace(k, node_type{ node_->get_allocator_ref() });
 			auto& [_, v] = *i;
 
 			return v;
 		}
 
-		template<std::integral T>
+		template <std::integral T>
 		constexpr basic_json_slice operator[](T pos)
 		{
 			if (!array())
 				throw json_error(json_errc::nonarray_indexing);
 
-			auto& a = *static_cast<array_type*>(stor().arr_);
+			auto& a = *static_cast<arr_ptr_t>(stor_var().arr_);
 
 			return a[pos];
 		}
@@ -895,17 +1308,16 @@ namespace bizwen
 
 			if (is_string)
 			{
-				*static_cast<string_type*>(stor().str_) = str;
+				*static_cast<str_ptr_t>(stor_var().str_) = str;
 			}
 			else // undefined
 			{
 				detail::node_variant_alloc_guard<string_type, node_type> guard(*node_);
 				auto ator = string_ator(node_->get_allocator_ref());
 				auto rawptr = guard.get();
-				string_ator_traits::construct(ator, rawptr, str);
-				stor().str_ = rawptr;
+				string_ator_traits::construct(ator, std::to_address(rawptr), str);
+				node_->stor_var().set_str_ptr(rawptr);
 				guard.release();
-				node_->kind_ = kind_t::string;
 			}
 
 			return *this;
@@ -921,17 +1333,16 @@ namespace bizwen
 
 			if (is_string)
 			{
-				*static_cast<string_type*>(stor().str_) = std::move(str);
+				*static_cast<str_ptr_t>(stor_var().str_) = std::move(str);
 			}
 			else // undefined
 			{
 				detail::node_variant_alloc_guard<string_type, node_type> guard(*node_);
 				auto ator = string_ator(node_->get_allocator_ref());
 				auto rawptr = guard.get();
-				string_ator_traits::construct(ator, rawptr, std::move(str));
-				stor().str_ = rawptr;
+				string_ator_traits::construct(ator, std::to_address(rawptr), std::move(str));
+				node_->stor_var().set_str_ptr(rawptr);
 				guard.release();
-				node_->kind_ = kind_t::string;
 			}
 
 			return *this;
@@ -947,17 +1358,16 @@ namespace bizwen
 
 			if (is_string)
 			{
-				*static_cast<string_type*>(stor().str_) = str;
+				*static_cast<str_ptr_t>(stor_var().str_) = str;
 			}
 			else // undefined
 			{
 				detail::node_variant_alloc_guard<string_type, node_type> guard(*node_);
 				auto ator = string_ator(node_->get_allocator_ref());
 				auto rawptr = guard.get();
-				string_ator_traits::construct(ator, rawptr, str);
-				stor().str_ = rawptr;
+				string_ator_traits::construct(ator, std::to_address(rawptr), str);
+				node_->stor_var().set_str_ptr(rawptr);
 				guard.release();
-				node_->kind_ = kind_t::string;
 			}
 
 			return *this;
@@ -976,17 +1386,16 @@ namespace bizwen
 
 			if (is_string)
 			{
-				*static_cast<string_type*>(stor().str_) = str;
+				*static_cast<str_ptr_t>(stor_var().str_) = str;
 			}
 			else
 			{
 				detail::node_variant_alloc_guard<string_type, node_type> guard(*node_);
 				auto ator = string_ator(node_->get_allocator_ref());
 				auto rawptr = guard.get();
-				string_ator_traits::construct(ator, rawptr, str);
-				stor().str_ = rawptr;
+				string_ator_traits::construct(ator, std::to_address(rawptr), str);
+				node_->stor_var().set_str_ptr(rawptr);
 				guard.release();
-				node_->kind_ = kind_t::string;
 			}
 
 			return *this;
@@ -1001,7 +1410,7 @@ namespace bizwen
 				throw json_error(json_errc::not_undefined_or_null);
 
 			if (is_undefined)
-				node_->kind_ = kind_t::null;
+				node_->stor_var().set_null();
 
 			return *this;
 		}
@@ -1019,7 +1428,7 @@ namespace bizwen
 					throw json_error(json_errc::not_undefined_or_boolean);
 
 				if (is_undefined)
-					node_->kind_ = (n ? kind_t::true_value : kind_t::false_value);
+					node_->stor_var().set_bool(n);
 			}
 			else if constexpr (HasInteger && std::signed_integral<T>)
 			{
@@ -1029,8 +1438,7 @@ namespace bizwen
 				if (!is_number && !is_undefined)
 					throw json_error(json_errc::not_undefined_or_number);
 
-				node_->stor_.int_ = n;
-				node_->kind_ = kind_t::integer;
+				node_->stor_var().set_int(n);
 			}
 			else if constexpr (HasUInteger && std::unsigned_integral<T>)
 			{
@@ -1040,8 +1448,7 @@ namespace bizwen
 				if (!is_number && !is_undefined)
 					throw json_error(json_errc::not_undefined_or_number);
 
-				node_->stor_.uint_ = n;
-				node_->kind_ = kind_t::uinteger;
+				node_->stor_var().set_uint(n);
 			}
 			else // fallback
 			{
@@ -1051,8 +1458,7 @@ namespace bizwen
 				if (!is_number && !is_undefined)
 					throw json_error(json_errc::not_undefined_or_number);
 
-				node_->stor_.num_ = n;
-				node_->kind_ = kind_t::number;
+				node_->stor_var().set_num(n);
 			}
 
 			return *this;
@@ -1126,7 +1532,11 @@ namespace bizwen
 	private:
 		using traits_t = std::allocator_traits<allocator_type>;
 		using kind_t = node_type::kind_t;
-		using stor_t = node_type::stor_t;
+		using stor_var_t = node_type::stor_var_t;
+
+		using str_ptr_t = const_slice_type::str_ptr_t;
+		using arr_ptr_t = const_slice_type::arr_ptr_t;
+		using obj_ptr_t = const_slice_type::obj_ptr_t;
 
 		using string_ator = std::allocator_traits<allocator_type>::template rebind_alloc<String>;
 		using string_ator_traits = std::allocator_traits<string_ator>;
@@ -1166,32 +1576,22 @@ namespace bizwen
 			return node_.kind_;
 		}
 
-		constexpr stor_t& stor() noexcept
-		{
-			return node_.stor_;
-		}
-
-		constexpr stor_t const& stor() const noexcept
-		{
-			return node_.stor_;
-		}
-
 		static constexpr void reset_node(node_type& node) noexcept
 		{
-			auto& s = node.stor_;
+			auto& s = node.stor_var();
 
-			switch (node.kind_)
+			switch (node.kind())
 			{
 			case kind_t::string: {
-				auto p = static_cast<string_type*>(s.str_);
+				auto p = static_cast<str_ptr_t>(s.str_);
 				auto ator = string_ator(node.get_allocator_ref());
 				string_ator_traits::destroy(ator, p);
-				detail::dealloc_from_node(node, p);
+				detail::dealloc_from_node<string_type>(node, p);
 
 				break;
 			}
 			case kind_t::array: {
-				auto p = static_cast<array_type*>(s.arr_);
+				auto p = static_cast<arr_ptr_t>(s.arr_);
 
 				for (auto&& i : *p)
 				{
@@ -1201,12 +1601,12 @@ namespace bizwen
 
 				auto ator = array_ator(node.get_allocator_ref());
 				array_ator_traits::destroy(ator, p);
-				detail::dealloc_from_node(node, p);
+				detail::dealloc_from_node<array_type>(node, p);
 
 				break;
 			}
 			case kind_t::object: {
-				auto p = static_cast<object_type*>(s.obj_);
+				auto p = static_cast<obj_ptr_t>(s.obj_);
 
 				for (auto&& [_, v] : *p)
 				{
@@ -1216,7 +1616,7 @@ namespace bizwen
 
 				auto ator = object_ator(node.get_allocator_ref());
 				object_ator_traits::destroy(ator, p);
-				detail::dealloc_from_node(node, p);
+				detail::dealloc_from_node<object_type>(node, p);
 
 				break;
 			}
@@ -1225,8 +1625,8 @@ namespace bizwen
 			}
 			}
 
-			s = stor_t{};
-			node.kind_ = kind_t{};
+			s.destroy_union();
+			s.kind_ = kind_t{};
 		}
 
 		constexpr void reset() noexcept
@@ -1331,16 +1731,9 @@ namespace bizwen
 
 		constexpr void swap_without_ator(basic_json& rhs) noexcept
 		{
-			{
-				auto temp = stor();
-				stor() = rhs.stor();
-				rhs.stor() = temp;
-			}
-			{
-				auto temp = kind();
-				kind(rhs.kind());
-				rhs.kind(temp);
-			}
+			auto temp = std::move(node_.stor_var());
+			node_.stor_var() = std::move(rhs.node_.stor_var());
+			rhs.node_.stor_var() = std::move(temp);
 		}
 
 	public:
@@ -1471,22 +1864,19 @@ namespace bizwen
 		{
 			if constexpr (std::same_as<T, bool>)
 			{
-				kind(n ? kind_t::true_value : kind_t::false_value);
+				node_.stor_var().set_bool(n);
 			}
 			else if constexpr (HasInteger && std::signed_integral<T>)
 			{
-				stor().int_ = n;
-				kind(kind_t::integer);
+				node_.stor_var().set_int(n);
 			}
 			else if constexpr (HasUInteger && std::unsigned_integral<T>)
 			{
-				stor().uint_ = n;
-				kind(kind_t::uinteger);
+				node_.stor_var().set_uint(n);
 			}
 			else // fallback
 			{
-				stor().num_ = n;
-				kind(kind_t::number);
+				node_.stor_var().set_num(n);
 			}
 		}
 
@@ -1496,10 +1886,9 @@ namespace bizwen
 			detail::node_variant_alloc_guard<string_type, node_type> guard(node_);
 			auto ator = string_ator(node_.get_allocator_ref());
 			auto rawptr = guard.get();
-			string_ator_traits::construct(ator, rawptr, std::move(v));
-			stor().str_ = rawptr;
+			string_ator_traits::construct(ator, std::to_address(rawptr), std::move(v));
+			node_.set_str_ptr(rawptr);
 			guard.release();
-			kind(kind_t::string);
 		}
 
 		constexpr basic_json(char_type const* begin, char_type const* end, allocator_type const& a = allocator_type())
@@ -1508,10 +1897,9 @@ namespace bizwen
 			detail::node_variant_alloc_guard<string_type, node_type> guard(node_);
 			auto ator = string_ator(node_.get_allocator_ref());
 			auto rawptr = guard.get();
-			string_ator_traits::construct(ator, rawptr, begin, end);
-			stor().str_ = rawptr;
+			string_ator_traits::construct(ator, std::to_address(rawptr), begin, end);
+			node_.stor_var().set_str_ptr(rawptr);
 			guard.release();
-			kind(kind_t::string);
 		}
 
 		constexpr basic_json(char_type const* str, string_type::size_type count, allocator_type const& a = allocator_type())
@@ -1520,10 +1908,9 @@ namespace bizwen
 			detail::node_variant_alloc_guard<string_type, node_type> guard(node_);
 			auto ator = string_ator(node_.get_allocator_ref());
 			auto rawptr = guard.get();
-			string_ator_traits::construct(ator, rawptr, str, count);
-			stor().str_ = rawptr;
+			string_ator_traits::construct(ator, std::to_address(rawptr), str, count);
+			node_.stor_var().set_str_ptr(rawptr);
 			guard.release();
-			kind(kind_t::string);
 		}
 
 		constexpr explicit basic_json(char_type const* str, allocator_type const& a = allocator_type())
@@ -1532,10 +1919,9 @@ namespace bizwen
 			detail::node_variant_alloc_guard<string_type, node_type> guard(node_);
 			auto ator = string_ator(node_.get_allocator_ref());
 			auto rawptr = guard.get();
-			string_ator_traits::construct(ator, rawptr, str);
-			stor().str_ = rawptr;
+			string_ator_traits::construct(ator, std::to_address(rawptr), str);
+			node_.stor_var().set_str_ptr(rawptr);
 			guard.release();
-			kind(kind_t::string);
 		}
 
 		template <typename StrLike>
@@ -1547,10 +1933,9 @@ namespace bizwen
 			detail::node_variant_alloc_guard<string_type, node_type> guard(node_);
 			auto ator = string_ator(node_.get_allocator_ref());
 			auto rawptr = guard.get();
-			string_ator_traits::construct(ator, rawptr, str);
-			stor().str_ = rawptr;
+			string_ator_traits::construct(ator, std::to_address(rawptr), str);
+			node_.stor_var().set_str_ptr(rawptr);
 			guard.release();
-			kind(kind_t::string);
 		}
 
 		constexpr basic_json(array_type arr, allocator_type const& a = allocator_type())
@@ -1560,11 +1945,10 @@ namespace bizwen
 			detail::node_variant_alloc_guard<array_type, node_type> guard(node_);
 			auto ator = array_ator(node_.get_allocator_ref());
 			auto rawptr = guard.get();
-			array_ator_traits::construct(ator, rawptr, std::move(arr));
-			stor().arr_ = rawptr;
+			array_ator_traits::construct(ator, std::to_address(rawptr), std::move(arr));
+			node_.stor_var().set_arr_ptr(rawptr);
 			guard.release();
 			rollbacker.release();
-			kind(kind_t::array);
 		}
 
 		constexpr basic_json(object_type obj, allocator_type const& a = allocator_type())
@@ -1574,25 +1958,22 @@ namespace bizwen
 			detail::node_variant_alloc_guard<object_type, node_type> guard(node_);
 			auto ator = object_ator(node_.get_allocator_ref());
 			auto rawptr = guard.get();
-			object_ator_traits::construct(ator, rawptr, std::move(obj));
-			stor().obj_ = rawptr;
+			object_ator_traits::construct(ator, std::to_address(rawptr), std::move(obj));
+			node_.stor_var().set_obj_ptr(rawptr);
 			guard.release();
 			rollbacker.release();
-			kind(kind_t::object);
 		}
 
 		constexpr basic_json(node_type&& n) noexcept
 		    : node_(std::move(n))
 		{
-			n.kind_ = kind_t{};
-			n.stor_ = stor_t{};
+			n.stor_var() = stor_var_t{};
 		}
 
 		constexpr basic_json(node_type&& n, allocator_type const& a) noexcept
 		    : node_(a)
 		{
-			kind(std::exchange(n.kind_, kind_t{}));
-			stor() = std::exchange(n.stor_, stor_t{});
+			node_.stor_var() = std::exchange(n.stor_var(), {});
 		}
 
 		constexpr allocator_type get_allocator() const noexcept
@@ -1603,39 +1984,37 @@ namespace bizwen
 		[[nodiscard("discard nodes will cause leaks")]] constexpr operator node_type() && noexcept
 		{
 			auto node = node_;
-			kind(kind_t{});
-			stor() = {};
-
+			node_.stor_var() = {};
 			return node;
 		}
 
 	private:
 		static constexpr void clone_node(node_type& lhs, node_type const& rhs)
 		{
-			auto rk = rhs.kind_;
-			auto const& rs = rhs.stor_;
-			auto& s = lhs.stor_;
+			auto rk = rhs.kind();
+			auto const& rs = rhs.stor_var();
+			auto& s = lhs.stor_var();
 
 			switch (rk)
 			{
 			case kind_t::string: {
-				auto const& rstr = *static_cast<string_type const*>(rs.str_);
+				auto const& rstr = *static_cast<str_ptr_t>(rs.str_);
 				detail::node_variant_alloc_guard<string_type, node_type> mem(lhs);
 				auto ator = string_ator(lhs.get_allocator_ref());
 				auto lptr = mem.get();
-				string_ator_traits::construct(ator, lptr, rstr);
+				string_ator_traits::construct(ator, std::to_address(lptr), rstr);
 				mem.release();
-				s.str_ = lptr;
+				lhs.stor_var().set_str_ptr(lptr);
 				break;
 			}
 			case kind_t::array: {
 				if constexpr (std::is_trivially_copyable_v<allocator_type>)
 				{
-					auto const& rarr = *static_cast<array_type const*>(rs.arr_);
+					auto const& rarr = *static_cast<arr_ptr_t>(rs.arr_);
 					detail::node_variant_alloc_guard<array_type, node_type> guard(lhs);
 					auto ator = array_ator(lhs.get_allocator_ref());
 					auto lptr = guard.get();
-					array_ator_traits::construct(ator, lptr, rarr);
+					array_ator_traits::construct(ator, std::to_address(lptr), rarr);
 					array_type& larr{ *lptr };
 					auto sentry = larr.begin();
 					rollbacker_array_part_ rollbacker(sentry, larr);
@@ -1648,15 +2027,15 @@ namespace bizwen
 					}
 
 					guard.release();
-					s.arr_ = lptr;
+					s.set_arr_ptr(lptr);
 				}
 				else
 				{
-					auto const& rarr = *static_cast<array_type const*>(rs.arr_);
+					auto const& rarr = *static_cast<arr_ptr_t>(rs.arr_);
 					detail::node_variant_alloc_guard<array_type, node_type> guard(lhs);
 					auto ator = array_ator(lhs.get_allocator_ref());
 					auto lptr = guard.get();
-					array_ator_traits::construct(ator, lptr);
+					array_ator_traits::construct(ator, std::to_address(lptr));
 					array_type& larr{ *lptr };
 					larr.reserve(rarr.size());
 					rollbacker_array_all_ rollbacker(larr);
@@ -1671,16 +2050,16 @@ namespace bizwen
 					}
 
 					guard.release();
-					s.arr_ = lptr;
+					s.set_arr_ptr(lptr);
 				}
 				break;
 			}
 			case kind_t::object: {
-				auto const& robj = *static_cast<object_type const*>(rs.obj_);
+				auto const& robj = *static_cast<obj_ptr_t>(rs.obj_);
 				detail::node_variant_alloc_guard<object_type, node_type> guard(lhs);
 				auto ator = object_ator(lhs.get_allocator_ref());
 				auto lptr = guard.get();
-				object_ator_traits::construct(ator, lptr);
+				object_ator_traits::construct(ator, std::to_address(lptr));
 				object_type& lobj{ *lptr };
 				rollbacker_map_all_ rollbacker(lobj);
 
@@ -1697,15 +2076,13 @@ namespace bizwen
 
 				rollbacker.release();
 				guard.release();
-				s.obj_ = lptr;
+				lhs.stor_.var_.set_obj_ptr(lptr);
 				break;
 			}
 			default: {
 				s = rs;
 			}
 			}
-
-			lhs.kind_ = rk;
 		}
 
 		constexpr void clone(const basic_json& rhs)
@@ -1851,7 +2228,7 @@ namespace bizwen
 	namespace pmr
 	{
 		template <typename Number = double, typename Integer = long long, typename UInteger = unsigned long long>
-		using basic_json_node = bizwen::basic_json_node<Number, Integer, UInteger, std::pmr::polymorphic_allocator<char>>;
+		using basic_json_node = bizwen::basic_json_node<Number, Integer, UInteger, std::pmr::polymorphic_allocator<>>;
 
 		template <typename Node = pmr::basic_json_node<>, typename String = std::pmr::string,
 		    typename Array = std::pmr::vector<Node>,
