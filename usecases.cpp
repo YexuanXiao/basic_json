@@ -21,9 +21,9 @@ int main()
 	json j05{ "abcdef" };
 	// Construct json with nullptr is forbidden because json does not have a pointer type and nullptr does not represent the empty string.
 	// json j05{ nullptr };
-	// Constructs a json value with status "null" and value `nulljson`.
+	// Construct a json value with status "null" and value `nulljson`.
 	json j06{ null };
-	// Since initializer_list returns a reference to a const object, this method is inefficient
+	// Since initializer_list returns a reference to a const object, this method is inefficient.
 	// json j07{ json::array_type{ json{0}, json{1} } };
 	// json j08{ json::object_type{ { "key0"s, json{ 0 } }, { "key1"s, json{ 1 } } } };
 	// Use the helper class templates json::array and json::object for easy and efficient construction of json arrays and json objects.
@@ -34,9 +34,9 @@ int main()
 	// Copy a json object copies its stored state and values.
 	auto j09{ j08 };
 
-	// slice is an accessor and modifier of json values, and the default constructed slice is not associated with any json
+	// slice is an accessor and modifier of json values, and the default constructed slice is not associated with any json.
 	slice s01{};
-	// Use empty() to test if slice is associated with a json
+	// Use empty() to test if slice is associated with a json.
 	auto is_empty{ s01.empty() };
 	assert(is_empty); // does nothing
 	slice s07{ j07 }; // s07 is associated to j07
@@ -57,8 +57,8 @@ int main()
 		assert(i.integer()); // does nothing
 	}
 	// Append a value to j07
-	// CWG issue 1996
-	json::array_type& arr{ s07 };
+	// Due to CWG1996, list initialization cannot be used here.
+	json::array_type& arr( s07 );
 	arr.push_back(json{ 2 });
 	slice s08{ j08 };
 	// Iterate j08
@@ -71,9 +71,9 @@ int main()
 	// Copying a slice is trivial
 	auto s08_1{ s08 };
 
-	// const_slice is similar to slice, but has only observers and never modifies the associated json
+	// const_slice is similar to slice, but has only observers and never modifies the associated json.
 	const_slice c01{ s01 };
-	// Unlike slice, if the key does not exist in the object then a json_error exception is thrown
+	// Unlike slice, if the key does not exist in the object then a json_error exception is thrown.
 	try
 	{
 		c01["keyn"];
