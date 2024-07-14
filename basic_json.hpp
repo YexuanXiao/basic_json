@@ -1569,7 +1569,7 @@ namespace bizwen
 
 		node_type node_;
 
-		constexpr void kind(kind_t k) noexcept { node_.kind_ = k; }
+		constexpr void kind(kind_t k) noexcept { node_.stor_.var_.kind_ = k; }
 
 		constexpr kind_t kind() const noexcept
 		{
@@ -2228,7 +2228,7 @@ namespace bizwen
 	namespace pmr
 	{
 		template <typename Number = double, typename Integer = long long, typename UInteger = unsigned long long>
-		using basic_json_node = bizwen::basic_json_node<Number, Integer, UInteger, std::pmr::polymorphic_allocator<>>;
+		using basic_json_node = bizwen::basic_json_node<Number, Integer, UInteger, std::pmr::polymorphic_allocator<std::byte>>;
 
 		template <typename Node = pmr::basic_json_node<>, typename String = std::pmr::string,
 		    typename Array = std::pmr::vector<Node>,
