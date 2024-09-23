@@ -1830,7 +1830,10 @@ namespace bizwen
 			else if constexpr (is_pocma_)
 			{
 				rhs.swap_without_ator(*this);
+				// N.B. ADL-swap may be ill-formed or have undesired effect
+				auto tmp_ator = std::move(node_.get_allocator_ref());
 				node_.get_allocator_ref() = std::move(rhs.node_.get_allocator_ref());
+				rhs.node_.get_allocator_ref() = std::move(tmp_ator);
 			}
 			else
 			{
