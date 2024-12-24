@@ -302,6 +302,8 @@ namespace bizwen
 				case kind_t::object:
 					obj_.~VoidPtr();
 					break;
+				default:
+					;
 				}
 			}
 
@@ -517,7 +519,7 @@ namespace bizwen
 #if __has_cpp_attribute(no_unique_address)
 #define BIZWEN_NO_UNIQUE_ADDRESS [[no_unique_address]]
 #elif __has_cpp_attribute(msvc::no_unique_address)
-#define BIZWEN_NO_UNIQUE_ADDRESS [[msvs::no_unique_address]]
+#define BIZWEN_NO_UNIQUE_ADDRESS [[msvc::no_unique_address]]
 #endif
 
 #ifdef BIZWEN_NO_UNIQUE_ADDRESS
@@ -1245,7 +1247,7 @@ namespace bizwen
 
 			auto& o = *static_cast<obj_ptr_t>(stor_var().obj_);
 			auto [i, _] = o.emplace(k, node_type{ node_->get_allocator_ref() });
-			auto& [_, v] = *i;
+			auto& [unused, v] = *i;
 
 			return v;
 		}
@@ -1265,7 +1267,7 @@ namespace bizwen
 
 			auto& o = *static_cast<obj_ptr_t>(stor_var().obj_);
 			auto [i, _] = o.emplace(k, node_type{ node_->get_allocator_ref() });
-			auto& [_, v] = *i;
+			auto& [unused, v] = *i;
 
 			return v;
 		}
@@ -1282,7 +1284,7 @@ namespace bizwen
 
 			auto& o = *static_cast<obj_ptr_t>(stor_var().obj_);
 			auto [i, _] = o.emplace(k, node_type{ node_->get_allocator_ref() });
-			auto& [_, v] = *i;
+			auto& [unused, v] = *i;
 
 			return v;
 		}
