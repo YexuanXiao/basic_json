@@ -352,7 +352,7 @@ namespace bizwen
 			constexpr void set_uint(UInt n) noexcept
 			{
 				if (kind_ == kind_t::uinteger)
-					num_ = n;
+					uint_ = n;
 				else
 				{
 					destroy_union();
