@@ -8,7 +8,7 @@ Revision: 0
 Status: D
 Audience: LEWG
 Group: WG21
-Date: 2024-07-14
+Date: 2025-04-30
 Markup Shorthands: markdown on
 Markup Shorthands: biblio yes
 ED: https://github.com/YexuanXiao/basic_json/blob/master/proposal.bs
@@ -255,7 +255,7 @@ int main()
 
 ## JSON processing
 
-[*Drafting note:* Add this subclause to [utilities]. -- *end drafting note*]
+[*Drafting note:* Add this subclause to [text]. -- *end drafting note*]
 
 ### Header `<json>` synopsis
 
@@ -356,10 +356,10 @@ namespace std {
 <pre highlight="c++">
 namespace std {
   template&lt;class Number = double, class Integer = long long, class UInteger = unsigned long long,
-           class Allocator = allocator<byte>>
+           class Allocator = allocator&lt;byte>>
     class basic_json_node {
     private:
-      using <i>void-ptr</i> = allocator_traits<Allocator>::void_pointer;   // exposition only
+      using <i>void-ptr</i> = allocator_traits&lt;Allocator>::void_pointer;   // exposition only
 
     public:
       using number_type    = Number;
@@ -367,7 +367,7 @@ namespace std {
       using uinteger_type  = UInteger;
       using allocator_type = Allocator;
 
-      constexpr basic_json_node() noexcept(is_nothrow_default_constructible_v<Allocator>)
+      constexpr basic_json_node() noexcept(is_nothrow_default_constructible_v&lt;Allocator>)
         requires default_initializable&lt;Allocator>;
       constexpr explicit basic_json_node(const Allocator& a) noexcept;
 
@@ -487,24 +487,24 @@ namespace std {
       using key_string_type = object_type::key_type;
       using key_char_type   = key_string_type::value_type;
 
-      constexpr basic_json() requires default_initializable<allocator_type> = default;
+      constexpr basic_json() requires default_initializable&lt;allocator_type> = default;
       constexpr explicit basic_json(const allocator_type& a) noexcept : <i>node_</i>(a) {}
       constexpr basic_json(const basic_json& rhs);
       constexpr basic_json(basic_json&& rhs) noexcept;
       constexpr basic_json& operator=(const basic_json& rhs);
       constexpr basic_json& operator=(basic_json&& rhs)
-        noexcept(allocator_traits<Allocator>::propagate_on_container_move_assignment::value ||
-                allocator_traits<Allocator>::is_always_equal::value);
+        noexcept(allocator_traits&lt;Allocator>::propagate_on_container_move_assignment::value ||
+                allocator_traits&lt;Allocator>::is_always_equal::value);
       constexpr ~basic_json();
       constexpr void swap(basic_json& rhs)
-        noexcept(allocator_traits<Allocator>::propagate_on_container_swap::value ||
-                 allocator_traits<Allocator>::is_always_equal::value);
+        noexcept(allocator_traits&lt;Allocator>::propagate_on_container_swap::value ||
+                 allocator_traits&lt;Allocator>::is_always_equal::value);
       friend constexpr void swap(basic_json& lhs, basic_json& rhs)
         noexcept(noexcept(lhs.swap(rhs)));
 
       constexpr basic_json(const basic_json& rhs, const allocator_type& a);
       constexpr basic_json(basic_json&& rhs, const allocator_type& a)
-        noexcept(allocator_traits<Allocator>::is_always_equal::value);
+        noexcept(allocator_traits&lt;Allocator>::is_always_equal::value);
 
       constexpr basic_json(nulljson_t, const allocator_type& a = allocator_type()) noexcept;
       template&lt;class T>
@@ -553,7 +553,7 @@ namespace std {
     - *qualified-id* `Array::value_type` is valid and denotes the same type as `Node`.
     - *qualified-id* `Object::mapped_type` is valid and denotes the same type as `Node`.
 
-<h5 id=construction-and-swap-basic-json>Construction and swap</h4>
+<h5 id=construction-and-swap-basic-json>Construction and swap</h5>
 
 1. Every constructor taking a `const allocator_type&` parameter constructs <i>`node_`</i> from that parameter.
 
@@ -813,7 +813,7 @@ namespace std {
 
 5. [*Note*: The `uses_allocator` partial specialization indicates that `basic_json_slice` should not be uses-allocator constructed. -- *end note*]
 
-<h5 id=construction-and-swap-basic-json-slice>Construction and swap</h4>
+<h5 id=construction-and-swap-basic-json-slice>Construction and swap</h5>
 
 ```cpp
 constexpr basic_json_slice(json_type& j) noexcept;
@@ -1132,7 +1132,7 @@ namespace std {
 
 5. [*Note*: The `uses_allocator` partial specialization indicates that `basic_const_json_slice` should not be uses-allocator constructed. -- *end note*]
 
-<h5 id=construction-and-swap-basic-const-json-slice>Construction and swap</h4>
+<h5 id=construction-and-swap-basic-const-json-slice>Construction and swap</h5>
 
 ```cpp
 constexpr basic_const_json_slice(const json_type& j) noexcept;
