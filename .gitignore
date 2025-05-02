@@ -1,2 +1,3 @@
 .vscode
-basic_string.hpp
+.cache
+build

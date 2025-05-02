@@ -31,3 +31,4 @@ UseTab: ForIndentation
 IndentWidth: 4
 TabWidth: 4
 IndentAccessModifiers: false
+ColumnLimit: 120
