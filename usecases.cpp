@@ -1,12 +1,23 @@
 #include "basic_json.hpp"
 #include <string_view>
 #include <cassert>
+
+struct simple_json_node
+{
+	using variant_type = std::variant<std::monostate, bizwen::nulljson_t, bool, double, long long, unsigned long long,
+	    std::string*, std::vector<simple_json_node>*, std::map<std::string, simple_json_node>*>;
+	using allocator_type = std::allocator<std::byte>;
+
+	variant_type stor;
+	allocator_type alloc;
+};
+
 int main()
 {
-	using json = bizwen::json;
-	using node = bizwen::json_node;
-	using slice = bizwen::json_slice;
-	using const_slice = bizwen::const_json_slice;
+	using node = simple_json_node;
+	using json = bizwen::basic_json<node>;
+	using slice = bizwen::basic_json_slice<node>;
+	using const_slice = bizwen::basic_const_json_slice<node>;
 	auto null = bizwen::nulljson;
 	using namespace std::literals;
 	// A json object represents a json value. The default constructed json object does not hold any value, and its state is "undefined".
