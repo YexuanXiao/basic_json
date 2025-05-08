@@ -1,6 +1,8 @@
 #include "basic_json.hpp"
-#include <string_view>
 #include <cassert>
+#include <vector>
+#include <string>
+#include <map>
 
 struct simple_json_node
 {

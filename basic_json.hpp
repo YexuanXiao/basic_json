@@ -4,15 +4,11 @@
 #include <cassert>
 #include <cstddef>
 #include <iterator>
-#include <map>
 #include <memory>
 #include <stdexcept>
-#include <string>
 #include <type_traits>
 #include <utility>
-#include <vector>
 #include <concepts>
-#include <array>
 #include <ranges>
 #include <variant>
 
@@ -155,18 +151,22 @@ namespace bizwen
 			using uinteger_type = std::variant_alternative_t<5uz, variant_type>;
 			static_assert(std::unsigned_integral<uinteger_type>);
 			using raw_string_type = std::variant_alternative_t<6uz, variant_type>;
+
 			template <typename T>
 			using defancy_remove_pointer_t = std::remove_pointer_t<decltype(std::to_address(std::declval<T>()))>;
+
 			template <typename S> struct get_string_type
 			{
 				using type = S;
 			};
+
 			template <typename S>
 			    requires(!requires { typename S::value_type; })
 			struct get_string_type<S>
 			{
 				using type = defancy_remove_pointer_t<S>;
 			};
+
 			using string_type = get_string_type<raw_string_type>::type;
 			using char_type = string_type::value_type;
 			static_assert(std::integral<char_type>);
@@ -175,8 +175,10 @@ namespace bizwen
 			using array_type = defancy_remove_pointer_t<raw_array_type>;
 			using raw_object_type = std::variant_alternative_t<8uz, variant_type>;
 			using object_type = defancy_remove_pointer_t<raw_object_type>;
+
 			template <typename T>
 			using rebind_traits = std::allocator_traits<allocator_type>::template rebind_traits<T>;
+
 			static_assert(
 			    !is_string_view && std::is_same_v<typename rebind_traits<string_type>::pointer, raw_string_type>);
 			// unused for support winrt::hstring and Qstring
@@ -197,6 +199,7 @@ namespace bizwen
 				auto ra = A(a);
 				std::allocator_traits<decltype(ra)>::deallocate(ra, ptr, 1uz);
 			}
+
 			template <typename T, typename... Ts>
 			static auto rebind_allocate_construct(allocator_type const& a, Ts... ts)
 			{
@@ -208,15 +211,18 @@ namespace bizwen
 					decltype(addr)& ptr;
 					A& a;
 					bool released;
+
 					~guard()
 					{
 						if (!released)
 							std::allocator_traits<A>::deallocate(a, ptr, 1uz);
 					}
 				};
+
 				guard g{ addr, ra, false };
 				rebind_traits<T>::construct(ra, addr, std::forward<Ts>(ts)...);
 				g.released = true;
+
 				return addr;
 			}
 
@@ -264,9 +270,10 @@ namespace bizwen
 					return get_raw<T>(stor);
 			}
 
-			static void reset_union(variant_type& stor, allocator_type& alloc, kind_t old_kind) noexcept
+			static void clear_variant(variant_type& stor, allocator_type& alloc, kind_t old_kind) noexcept
 			{
 				using enum kind_t;
+
 				switch (old_kind)
 				{
 				case kind_t::string:
@@ -279,7 +286,7 @@ namespace bizwen
 					auto ptr = get_raw<raw_array_type>(stor);
 					for (auto& i : *ptr)
 					{
-						reset_union(i.stor, i.alloc, get_kind(i.stor));
+						clear_variant(i.stor, i.alloc, get_kind(i.stor));
 					}
 					rebind_deallocate(alloc, ptr);
 				}
@@ -287,7 +294,7 @@ namespace bizwen
 					auto ptr = get_raw<raw_object_type>(stor);
 					for (auto& [key, value] : *ptr)
 					{
-						reset_union(value.stor, value.alloc, get_kind(value.stor));
+						clear_variant(value.stor, value.alloc, get_kind(value.stor));
 					}
 					rebind_deallocate(alloc, ptr);
 				}
@@ -340,50 +347,52 @@ namespace bizwen
 				    rebind_allocate_construct<object_type>(alloc, std::forward<Ts...>(ts)...));
 			}
 
-			static void copy_variant(variant_type const& lhs, variant_type& rhs, allocator_type& alloc)
+			static void copy_variant(variant_type const& from, variant_type& to, allocator_type& alloc)
 			{
-				switch (get_kind(lhs))
+				switch (get_kind(from))
 				{
 				case kind_t::undefined:
 					break;
 				case kind_t::null:
-					rhs.template emplace<nulljson_t>();
+					to.template emplace<nulljson_t>();
 					break;
 				case kind_t::boolean:
-					rhs.template emplace<bool>();
+					to.template emplace<bool>();
 					break;
 				case kind_t::number:
-					rhs.template emplace<number_type>(get_val<number_type>(lhs));
+					to.template emplace<number_type>(get_val<number_type>(from));
 					break;
 				case kind_t::integer:
-					rhs.template emplace<integer_type>(get_val<integer_type>(lhs));
+					to.template emplace<integer_type>(get_val<integer_type>(from));
 					break;
 				case kind_t::uinteger:
-					rhs.template emplace<uinteger_type>(get_val<uinteger_type>(lhs));
+					to.template emplace<uinteger_type>(get_val<uinteger_type>(from));
 					break;
 				case kind_t::string:
 					if constexpr (is_string_view)
-						rhs.template emplace<string_type>(get_val<raw_string_type>(lhs));
+						to.template emplace<string_type>(get_val<raw_string_type>(from));
 					else
-						rhs.template emplace<raw_string_type>(
-						    rebind_allocate_construct<string_type>(alloc, *get_raw<raw_string_type>(lhs)));
+						to.template emplace<raw_string_type>(
+						    rebind_allocate_construct<string_type>(alloc, *get_raw<raw_string_type>(from)));
 					break;
 				case kind_t::array:
-					rhs.template emplace<raw_array_type>(rebind_allocate_construct<array_type>(alloc, std::from_range,
-					    (*get_raw<raw_array_type>(lhs)) | std::views::transform([](node_type const& lhs) static {
+					to.template emplace<raw_array_type>(rebind_allocate_construct<array_type>(alloc, std::from_range,
+					    (*get_raw<raw_array_type>(from)) | std::views::transform([](node_type const& lhs) static {
 						    node_type rhs{ std::monostate{}, lhs.alloc };
 						    copy_variant(lhs.stor, rhs.stor, rhs.alloc);
+
 						    return rhs;
 					    })));
 					break;
 				case kind_t::object:
-					rhs.template emplace<raw_object_type>(rebind_allocate_construct<object_type>(alloc, std::from_range,
-					    (*get_raw<raw_object_type>(lhs))
+					to.template emplace<raw_object_type>(rebind_allocate_construct<object_type>(alloc, std::from_range,
+					    (*get_raw<raw_object_type>(from))
 					        | std::views::transform([](object_type::value_type const& lhs) {
 						          auto&& [key, value] = lhs;
 						          typename object_type::value_type rhs{ key, { std::monostate{}, value.alloc } };
 						          auto&& [_, out_value] = rhs;
-						          copy_variant(out_value.stor, out_value.stor, out_value.alloc);
+						          copy_variant(value.stor, out_value.stor, out_value.alloc);
+
 						          return rhs;
 					          })));
 					break;
@@ -462,12 +471,7 @@ namespace bizwen
 
 			[[nodiscard]] constexpr bool null() const noexcept { return kind() == kind_t::null; }
 
-			[[nodiscard]] constexpr bool boolean() const noexcept
-			{
-				auto k = kind();
-
-				return k == kind_t::boolean;
-			}
+			[[nodiscard]] constexpr bool boolean() const noexcept { return kind() == kind_t::boolean; }
 
 			[[nodiscard]] constexpr bool number() const noexcept
 			{
@@ -507,12 +511,12 @@ namespace bizwen
 
 			constexpr explicit operator bool() const
 			{
-				if (!boolean())
-					throw json_error(json_errc::not_boolean);
-
 				auto k = kind();
 
-				return k == kind_t::boolean && get_val<bool>();
+				if (!k == kind_t::boolean)
+					throw json_error(json_errc::not_boolean);
+
+				return get_val<bool>();
 			}
 
 			constexpr explicit operator number_type() const
@@ -596,6 +600,7 @@ namespace bizwen
 			{
 				constexpr auto node_to_slice
 				    = [](node_type const& node) static noexcept { return const_slice_type{ node }; };
+
 				return static_cast<array_type const&>(*this) | std::views::transform(node_to_slice);
 			}
 
@@ -605,6 +610,7 @@ namespace bizwen
 					auto& [key, value]{ pair };
 					return std::pair<key_string_type const&, const_slice_type>{ key, value };
 				};
+
 				return static_cast<object_type const&>(*this) | std::views::transform(pair_node_to_slice);
 			}
 		};
@@ -827,7 +833,8 @@ namespace bizwen
 		constexpr void reset() noexcept
 		{
 			assert(node_);
-			node_traits_t::reset_union(node_->stor, node_->alloc, kind());
+			node_traits_t::clear_variant(node_->stor, node_->alloc, kind());
+			node_traits_t::set_undefined(node_->stor);
 		}
 
 		constexpr basic_json_slice operator[](key_string_type const& k)
@@ -1057,6 +1064,7 @@ namespace bizwen
 		constexpr auto as_array()
 		{
 			constexpr auto node_to_slice = [](node_type& node) static noexcept { return basic_json_slice{ node }; };
+
 			return static_cast<array_type&>(*this) | std::views::transform(node_to_slice);
 		}
 
@@ -1068,6 +1076,7 @@ namespace bizwen
 				auto& [key, value]{ pair };
 				return std::pair<key_string_type const&, basic_json_slice>{ key, value };
 			};
+
 			return static_cast<object_type&>(*this) | std::views::transform(pair_node_to_slice);
 		}
 	};
@@ -1127,7 +1136,11 @@ namespace bizwen
 
 		constexpr detail::kind_t kind() const noexcept { return node_traits_t::get_kind(node_.stor); }
 
-		constexpr void reset() noexcept { node_traits_t::reset_union(node_.stor, node_.alloc, kind()); }
+		constexpr void reset() noexcept
+		{
+			node_traits_t::clear_variant(node_.stor, node_.alloc, kind());
+			node_traits_t::set_undefined(node_.stor);
+		}
 
 		struct rollbacker_array_part_
 		{
@@ -1153,7 +1166,7 @@ namespace bizwen
 
 				for (auto begin = array.begin(); begin != sentry; ++begin)
 				{
-					node_traits_t::reset_union(begin->stor, begin->alloc, node_traits_t::get_kind(begin->stor));
+					node_traits_t::clear_variant(begin->stor, begin->alloc, node_traits_t::get_kind(begin->stor));
 				}
 			}
 		};
@@ -1184,7 +1197,7 @@ namespace bizwen
 
 				for (auto begin = array.begin(); begin != end; ++begin)
 				{
-					node_traits_t::reset_union(begin->stor, begin->alloc, node_traits_t::get_kind(begin->stor));
+					node_traits_t::clear_variant(begin->stor, begin->alloc, node_traits_t::get_kind(begin->stor));
 				}
 			}
 		};
@@ -1213,7 +1226,7 @@ namespace bizwen
 				for (auto begin = object.begin(); begin != end; ++begin)
 				{
 					auto&& [key, value] = *begin;
-					node_traits_t::reset_union(value.stor, value.alloc, node_traits_t::get_kind(value.stor));
+					node_traits_t::clear_variant(value.stor, value.alloc, node_traits_t::get_kind(value.stor));
 				}
 			}
 		};
@@ -1225,6 +1238,11 @@ namespace bizwen
 			rhs.node_.stor = std::move(temp);
 		}
 
+		constexpr void clone(const basic_json& rhs)
+		{
+			node_traits_t::copy_variant(rhs.node_.stor, node_.stor, node_.alloc);
+		}
+
 	public:
 		constexpr void swap(basic_json& rhs) noexcept // strengthened
 		{
@@ -1234,12 +1252,12 @@ namespace bizwen
 				if constexpr (is_pocs_)
 				{
 					using std::swap;
-					swap(node_.get_allocator_ref(), rhs.node_.get_allocator_ref()); // ADL-swap
+					swap(node_.alloc, rhs.node_.alloc); // ADL-swap
 				}
 				else
 				{
 					// UB if unequal
-					assert(node_.get_allocator_ref() == rhs.node_.get_allocator_ref());
+					assert(node_.alloc == rhs.node_.alloc);
 				}
 			}
 		}
@@ -1435,14 +1453,6 @@ namespace bizwen
 			node_.stor.template emplace<std::monostate>();
 			return node;
 		}
-
-	private:
-		static constexpr void clone_node(node_type& lhs, node_type const& rhs)
-		{
-			node_traits_t::copy_variant(rhs.stor, lhs.stor, lhs.alloc);
-		}
-
-		constexpr void clone(const basic_json& rhs) { clone_node(node_, rhs.node_); }
 
 	public:
 		constexpr ~basic_json() noexcept { reset(); }
