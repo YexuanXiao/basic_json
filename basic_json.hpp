@@ -204,7 +204,7 @@ namespace bizwen
 			}
 
 			template <typename T, typename... Args>
-			static auto rebind_allocate_construct(allocator_type const& a, Args... args)
+			static auto rebind_allocate_construct(allocator_type const& a, Args&&... args)
 			{
 				using RA = std::allocator_traits<allocator_type>::template rebind_alloc<T>;
 
@@ -307,24 +307,24 @@ namespace bizwen
 			static void set_string(variant_type& stor, allocator_type& alloc, Args&&... args) noexcept
 			{
 				if constexpr (is_string_view)
-					stor.template emplace<string_type>(std::forward<Args...>(args)...);
+					stor.template emplace<string_type>(std::forward<Args>(args)...);
 				else
 					stor.template emplace<raw_string_type>(rebind_allocate_construct<string_type>(
-					    alloc, std::forward<string_type>(std::forward<Args...>(args)...)));
+					    alloc, std::forward<string_type>(std::forward<Args>(args)...)));
 			}
 
-			template <typename... Ts>
-			static void set_array(variant_type& stor, allocator_type& alloc, Ts&&... ts) noexcept
+			template <typename... Args>
+			static void set_array(variant_type& stor, allocator_type& alloc, Args&&... args) noexcept
 			{
 				stor.template emplace<raw_array_type>(
-				    rebind_allocate_construct<array_type>(alloc, std::forward<Ts...>(ts)...));
+				    rebind_allocate_construct<array_type>(alloc, std::forward<Args>(args)...));
 			}
 
-			template <typename... Ts>
-			static void set_object(variant_type& stor, allocator_type& alloc, Ts&&... ts) noexcept
+			template <typename... Args>
+			static void set_object(variant_type& stor, allocator_type& alloc, Args&&... args) noexcept
 			{
 				stor.template emplace<raw_object_type>(
-				    rebind_allocate_construct<object_type>(alloc, std::forward<Ts...>(ts)...));
+				    rebind_allocate_construct<object_type>(alloc, std::forward<Args>(args)...));
 			}
 		};
 
@@ -1576,55 +1576,44 @@ namespace bizwen
 			case undefined:
 				break;
 			case null:
-				to.template emplace<nulljson_t>();
+				json_traits_t::set_undefined(to);
 				break;
 			case boolean:
-				to.template emplace<bool>();
+				json_traits_t::set_boolean(to, json_traits_t::template get_val<bool>(from));
 				break;
 			case number:
-				to.template emplace<typename json_traits_t::number_type>(
-				    json_traits_t::template get_val<typename json_traits_t::number_type>(from));
+				json_traits_t::set_number(to, json_traits_t::template get_val<number_type>(from));
 				break;
 			case integer:
-				to.template emplace<typename json_traits_t::integer_type>(
-				    json_traits_t::template get_val<typename json_traits_t::integer_type>(from));
+				json_traits_t::set_integer(to, json_traits_t::template get_val<integer_type>(from));
 				break;
 			case uinteger:
-				to.template emplace<typename json_traits_t::uinteger_type>(
-				    json_traits_t::template get_val<typename json_traits_t::uinteger_type>(from));
+				json_traits_t::set_uinteger(to, json_traits_t::template get_val<uinteger_type>(from));
 				break;
 			case string:
-				if constexpr (json_traits_t::is_string_view)
-					to.template emplace<string_type>(
-					    json_traits_t::template get_val<typename json_traits_t::raw_string_type>(from));
-				else
-					to.template emplace<typename json_traits_t::raw_string_type>(
-					    json_traits_t::template rebind_allocate_construct<string_type>(
-					        alloc, *json_traits_t::template get_raw<typename json_traits_t::raw_string_type>(from)));
+				json_traits_t::set_string(to, alloc, json_traits_t::template get_val<string_type>(from));
 				break;
 			case array:
-				to.template emplace<typename json_traits_t::raw_array_type>(
-				    json_traits_t::template rebind_allocate_construct<array_type>(alloc, std::from_range,
-				        (*json_traits_t::template get_raw<typename json_traits_t::raw_array_type>(from))
-				            | std::views::transform([](node_type const& lhs) static {
-					              node_type rhs{ lhs.alloc };
-					              copy_variant(lhs.stor, rhs.stor, rhs.alloc);
+				json_traits_t::set_array(to, alloc, std::from_range,
+				    json_traits_t::template get_val<array_type>(from)
+				        | std::views::transform([](node_type const& lhs) static {
+					          node_type rhs{ lhs.alloc };
+					          copy_variant(lhs.stor, rhs.stor, rhs.alloc);
 
-					              return rhs;
-				              })));
+					          return rhs;
+				          }));
 				break;
 			case object:
-				to.template emplace<typename json_traits_t::raw_object_type>(
-				    json_traits_t::template rebind_allocate_construct<object_type>(alloc, std::from_range,
-				        (*json_traits_t::template get_raw<typename json_traits_t::raw_object_type>(from))
-				            | std::views::transform([](object_type::value_type const& lhs) {
-					              auto&& [key, value] = lhs;
-					              typename object_type::value_type rhs{ key, { value.alloc } };
-					              auto&& [_, out_value] = rhs;
-					              copy_variant(value.stor, out_value.stor, out_value.alloc);
+				json_traits_t::set_object(to, alloc, std::from_range,
+				    json_traits_t::template get_val<object_type>(from)
+				        | std::views::transform([](object_type::value_type const& lhs) {
+					          auto&& [key, value] = lhs;
+					          typename object_type::value_type rhs{ key, { value.alloc } };
+					          auto&& [_, out_value] = rhs;
+					          copy_variant(value.stor, out_value.stor, out_value.alloc);
 
-					              return rhs;
-				              })));
+					          return rhs;
+				          }));
 				break;
 			}
 		}
