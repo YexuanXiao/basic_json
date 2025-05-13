@@ -1,14 +1,32 @@
 #include "basic_json.hpp"
 #include <cassert>
+#include <variant>
 #include <vector>
 #include <string>
 #include <map>
 
-struct simple_json_node
+class simple_json_node
 {
+	// LWG3917 https://cplusplus.github.io/LWG/issue3917
+	// The standard is not clear on whether allocators support incomplete types,
+	// but all current active implementations support this.
 	using variant_type = std::variant<std::monostate, bizwen::nulljson_t, bool, double, long long, unsigned long long,
 	    std::string*, std::vector<simple_json_node>*, std::map<std::string, simple_json_node>*>;
-	using allocator_type = std::allocator<std::byte>;
+	using allocator_type = std::allocator<simple_json_node>;
+
+	template <typename, bool, bool>
+	friend class bizwen::basic_json;
+	template <typename, bool, bool>
+	friend class bizwen::basic_json_slice;
+	template <typename, bool, bool>
+	friend class bizwen::basic_const_json_slice;
+
+	simple_json_node() = default;
+
+	constexpr simple_json_node(allocator_type const& a)
+	    : alloc(a)
+	{
+	}
 
 	variant_type stor;
 	allocator_type alloc;
@@ -22,32 +40,34 @@ int main()
 	using const_slice = bizwen::basic_const_json_slice<node>;
 	auto null = bizwen::nulljson;
 	using namespace std::literals;
-	// A json object represents a json value. The default constructed json object does not hold any value, and its state is "undefined".
+	// A json object represents a json value. The default constructed json object does not hold any value, and its state
+	// is "undefined".
 	json j01{};
 	// Construct a json value with status "number" and value `1`.
 	json j02{ 1. };
 	// Construct a json value with status "true_value" and value `true`.
 	json j03{ true };
-	// Construct a json value with status "uinteger" and value `1`. This method is used to accurately store integers with more than 52 bits.
+	// Construct a json value with status "uinteger" and value `1`. This method is used to accurately store integers
+	// with more than 52 bits.
 	json j04{ 1ull };
 	// Construct a json value with status "string" and value `"abcdef"`.
 	json j05{ "abcdef" };
-	// Construct json with nullptr is forbidden because json does not have a pointer type and nullptr does not represent the empty string.
-	// json j05{ nullptr };
-	// Construct a json value with status "null" and value `nulljson`.
+	// Construct json with nullptr is forbidden because json does not have a pointer type and nullptr does not represent
+	// the empty string. json j05{ nullptr }; Construct a json value with status "null" and value `nulljson`.
 	json j06{ null };
 	// Since initializer_list returns a reference to a const object, this method is inefficient.
 	// json j07{ json::array_type{ json{0}, json{1} } };
 	// json j08{ json::object_type{ { "key0"s, json{ 0 } }, { "key1"s, json{ 1 } } } };
-	// Use the helper class templates json::array and json::object for easy and efficient construction of json arrays and json objects.
-	// Constructs a json value with the state "array", containing two ordered values 0 and 1.
+	// Use the helper class templates json::array and json::object for easy and efficient construction of json arrays
+	// and json objects. Constructs a json value with the state "array", containing two ordered values 0 and 1.
 	json j07{ json::array{ 0, 1 } };
 	// Construct a json value with state "object" such that `s08["key0"]==0` and `s08["key1"]==1` is true.
 	json j08{ json::object{ "key0"s, 0, "key1"s, 1 } };
 	// Copy a json object copies its stored state and values.
 	auto j09{ j08 };
 
-	// slice is an accessor and modifier of json values, and the default constructed slice is not associated with any json.
+	// slice is an accessor and modifier of json values, and the default constructed slice is not associated with any
+	// json.
 	slice s01{};
 	// Use empty() to test if slice is associated with a json.
 	auto is_empty{ s01.empty() };
@@ -71,7 +91,7 @@ int main()
 	}
 	// Append a value to j07
 	// Due to CWG1996, list initialization cannot be used here.
-	json::array_type& arr( s07 );
+	json::array_type& arr(s07);
 	arr.push_back(json{ 2 });
 	slice s08{ j08 };
 	// Iterate j08

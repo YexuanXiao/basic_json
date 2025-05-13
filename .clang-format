@@ -20,6 +20,7 @@ BraceWrapping:
   SplitEmptyFunction: true
   SplitEmptyRecord: true
   SplitEmptyNamespace: true
+BreakTemplateDeclarations: Yes
 DeriveLineEnding: false
 NamespaceIndentation: All
 SortIncludes: false
