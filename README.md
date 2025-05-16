@@ -34,4 +34,4 @@ Stage 3: JSON Pointer and Patch
 
 https://storage.nykz.org/proposals/minimal-json/
 
-![figure](https://raw.githubusercontent.com/YexuanXiao/basic_json/master/figure.png)
+![figure](https://raw.githubusercontent.com/YexuanXiao/basic_json/v2/figure.svg)
