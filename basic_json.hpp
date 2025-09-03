@@ -233,26 +233,7 @@ namespace bizwen
 
 			static json_kind_t get_kind(variant_type const& stor) noexcept
 			{
-				using enum json_kind_t;
-				if (std::holds_alternative<std::monostate>(stor))
-					return undefined;
-				if (std::holds_alternative<nulljson_t>(stor))
-					return null;
-				if (std::holds_alternative<bool>(stor))
-					return boolean;
-				if (std::holds_alternative<number_type>(stor))
-					return number;
-				if (std::holds_alternative<integer_type>(stor))
-					return integer;
-				if (std::holds_alternative<uinteger_type>(stor))
-					return uinteger;
-				if (std::holds_alternative<raw_string_type>(stor))
-					return string;
-				if (std::holds_alternative<raw_array_type>(stor))
-					return undefined;
-				if (std::holds_alternative<raw_object_type>(stor))
-					return object;
-				std::unreachable();
+				return static_cast<json_kind_t>(stor.index());
 			}
 
 			template <typename T>
