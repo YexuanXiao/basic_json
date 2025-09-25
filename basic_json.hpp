@@ -203,7 +203,7 @@ namespace bizwen
 			using map_node_type = object_type::node_type;
 
 			template <typename Tp>
-			static void rebind_destroy_deallocate(allocator_type const& a, Tp ptr) noexcept
+			constexpr static void rebind_destroy_deallocate(allocator_type const& a, Tp ptr) noexcept
 			{
 				using T = std::remove_reference_t<decltype(*ptr)>;
 				using RA = std::allocator_traits<allocator_type>::template rebind_alloc<T>;
@@ -214,7 +214,7 @@ namespace bizwen
 			}
 
 			template <typename T, typename... Args>
-			static auto rebind_allocate_construct(allocator_type const& a, Args&&... args)
+			constexpr static auto rebind_allocate_construct(allocator_type const& a, Args&&... args)
 			{
 				using RA = std::allocator_traits<allocator_type>::template rebind_alloc<T>;
 
@@ -241,25 +241,25 @@ namespace bizwen
 				return addr;
 			}
 
-			static json_kind_t get_kind(variant_type const& stor) noexcept
+			constexpr static json_kind_t get_kind(variant_type const& stor) noexcept
 			{
 				return static_cast<json_kind_t>(stor.index());
 			}
 
 			template <typename T>
-			static T& get_raw(variant_type& stor) noexcept
+			constexpr static T& get_raw(variant_type& stor) noexcept
 			{
 				return *std::get_if<T>(&stor);
 			}
 
 			template <typename T>
-			static const T& get_raw(variant_type const& stor) noexcept
+			constexpr static const T& get_raw(variant_type const& stor) noexcept
 			{
 				return *std::get_if<T>(&stor);
 			}
 
 			template <typename T, typename V>
-			static auto& get_val(V& stor) noexcept
+			constexpr static auto& get_val(V& stor) noexcept
 			{
 				if constexpr (std::is_same_v<string_type, T> && is_string_view)
 					return get_raw<raw_string_type>(stor);
@@ -273,29 +273,32 @@ namespace bizwen
 					return get_raw<T>(stor);
 			}
 
-			static void set_undefined(variant_type& stor) { stor.template emplace<std::monostate>(); }
+			constexpr static void set_undefined(variant_type& stor) { stor.template emplace<std::monostate>(); }
 
-			static void set_null(variant_type& stor) { stor.template emplace<nulljson_t>(); }
+			constexpr static void set_null(variant_type& stor) { stor.template emplace<nulljson_t>(); }
 
-			static void set_boolean(variant_type& stor, bool value) noexcept { stor.template emplace<bool>(value); }
+			constexpr static void set_boolean(variant_type& stor, bool value) noexcept
+			{
+				stor.template emplace<bool>(value);
+			}
 
-			static void set_number(variant_type& stor, number_type value) noexcept
+			constexpr static void set_number(variant_type& stor, number_type value) noexcept
 			{
 				stor.template emplace<number_type>(value);
 			}
 
-			static void set_integer(variant_type& stor, integer_type value) noexcept
+			constexpr static void set_integer(variant_type& stor, integer_type value) noexcept
 			{
 				stor.template emplace<integer_type>(value);
 			}
 
-			static void set_uinteger(variant_type& stor, uinteger_type value) noexcept
+			constexpr static void set_uinteger(variant_type& stor, uinteger_type value) noexcept
 			{
 				stor.template emplace<uinteger_type>(value);
 			}
 
 			template <typename... Args>
-			static void set_string(variant_type& stor, allocator_type& alloc, Args&&... args) noexcept
+			constexpr static void set_string(variant_type& stor, allocator_type& alloc, Args&&... args) noexcept
 			{
 				if constexpr (is_string_view)
 					stor.template emplace<string_type>(std::forward<Args>(args)...);
@@ -305,14 +308,14 @@ namespace bizwen
 			}
 
 			template <typename... Args>
-			static void set_array(variant_type& stor, allocator_type& alloc, Args&&... args) noexcept
+			constexpr static void set_array(variant_type& stor, allocator_type& alloc, Args&&... args) noexcept
 			{
 				stor.template emplace<raw_array_type>(
 				    rebind_allocate_construct<array_type>(alloc, std::forward<Args>(args)...));
 			}
 
 			template <typename... Args>
-			static void set_object(variant_type& stor, allocator_type& alloc, Args&&... args) noexcept
+			constexpr static void set_object(variant_type& stor, allocator_type& alloc, Args&&... args) noexcept
 			{
 				stor.template emplace<raw_object_type>(
 				    rebind_allocate_construct<object_type>(alloc, std::forward<Args>(args)...));
@@ -368,6 +371,8 @@ namespace bizwen
 
 		template <typename Slice, typename Var, typename A>
 		class basic_json_slice_common_base
+		    : public detail::integer_base<typename detail::json_traits<Var, A>::integer_type,
+		          typename detail::json_traits<Var, A>::uinteger_type>
 		{
 			using json_traits_t = json_traits<Var, A>;
 			using integer_type_internal = json_traits_t::integer_type;
@@ -390,10 +395,11 @@ namespace bizwen
 			using allocator_type = json_traits_t::allocator_type;
 			using key_string_type = json_traits_t::key_string_type;
 			using key_char_type = json_traits_t::key_char_type;
-			node_type* node_{}; // made private in derived classes
 
 			static inline constexpr bool has_integer = !std::is_same_v<integer_type_internal, disable_integer_t>;
 			static inline constexpr bool has_uinteger = !std::is_same_v<uinteger_type_internal, disable_uinteger_t>;
+
+			node_type* node_{}; // made private in derived classes
 
 		private:
 			constexpr json_kind_t kind() const { return static_cast<Slice const&>(*this).kind(); }
@@ -410,7 +416,11 @@ namespace bizwen
 				return static_cast<Slice const&>(*this).template get_val<T>();
 			}
 
+			constexpr basic_json_slice_common_base(node_type* node) noexcept { node_ = node; };
+
 		public:
+			constexpr basic_json_slice_common_base() noexcept = default;
+
 			[[nodiscard]] constexpr bool empty() const noexcept { return node_ != nullptr; }
 
 			[[nodiscard]] constexpr bool undefined() const noexcept { return kind() == json_kind_t::undefined; }
@@ -552,10 +562,7 @@ namespace bizwen
 
 	template <typename Node>
 	class basic_const_json_slice: public detail::basic_json_slice_common_base<basic_const_json_slice<Node>,
-	                                  decltype(Node::stor), decltype(Node::alloc)>,
-	      public detail::integer_base<
-	          typename detail::json_traits<decltype(Node::stor), decltype(Node::alloc)>::integer_type,
-	          typename detail::json_traits<decltype(Node::stor), decltype(Node::alloc)>::uinteger_type>
+	                                  decltype(Node::stor), decltype(Node::alloc)>
 	{
 		using json_traits_t = detail::json_traits<decltype(Node::stor), decltype(Node::alloc)>;
 		using base_type = detail::basic_json_slice_common_base<basic_const_json_slice<Node>, decltype(Node::stor),
@@ -727,12 +734,8 @@ namespace bizwen
 	};
 
 	template <typename Node>
-	class basic_json_slice
-	    : public detail::basic_json_slice_common_base<basic_json_slice<Node>, decltype(Node::stor),
-	          decltype(Node::alloc)>,
-	      public detail::integer_base<
-	          typename detail::json_traits<decltype(Node::stor), decltype(Node::alloc)>::integer_type,
-	          typename detail::json_traits<decltype(Node::stor), decltype(Node::alloc)>::uinteger_type>
+	class basic_json_slice: public detail::basic_json_slice_common_base<basic_json_slice<Node>, decltype(Node::stor),
+	                            decltype(Node::alloc)>
 	{
 		using json_traits_t = detail::json_traits<decltype(Node::stor), decltype(Node::alloc)>;
 		using base_type
@@ -1091,10 +1094,9 @@ namespace bizwen
 	};
 
 	template <typename Node>
-	class basic_json:
-	      public detail::integer_base<
-	          typename detail::json_traits<decltype(Node::stor), decltype(Node::alloc)>::integer_type,
-	          typename detail::json_traits<decltype(Node::stor), decltype(Node::alloc)>::uinteger_type>
+	class basic_json: public detail::integer_base<
+	                      typename detail::json_traits<decltype(Node::stor), decltype(Node::alloc)>::integer_type,
+	                      typename detail::json_traits<decltype(Node::stor), decltype(Node::alloc)>::uinteger_type>
 	{
 		using json_traits_t = detail::json_traits<decltype(Node::stor), decltype(Node::alloc)>;
 
@@ -1122,8 +1124,10 @@ namespace bizwen
 		friend const_slice_type;
 		friend slice_type;
 
-		static inline constexpr bool has_integer = !std::is_same_v<typename json_traits_t::integer_type, disable_integer_t>;
-		static inline constexpr bool has_uinteger = !std::is_same_v<typename json_traits_t::uinteger_type, disable_uinteger_t>;
+		static inline constexpr bool has_integer
+		    = !std::is_same_v<typename json_traits_t::integer_type, disable_integer_t>;
+		static inline constexpr bool has_uinteger
+		    = !std::is_same_v<typename json_traits_t::uinteger_type, disable_uinteger_t>;
 
 	private:
 		static constexpr bool is_ator_stateless_ = std::allocator_traits<allocator_type>::is_always_equal::value;
@@ -1618,11 +1622,14 @@ namespace bizwen
 				json_traits_t::set_number(to, json_traits_t::template get_val<number_type>(from));
 				break;
 			case integer:
-			if constexpr(has_integer)
-				json_traits_t::set_integer(to, json_traits_t::template get_val<typename json_traits_t::integer_type>(from));
+				if constexpr (has_integer)
+					json_traits_t::set_integer(
+					    to, json_traits_t::template get_val<typename json_traits_t::integer_type>(from));
 				break;
 			case uinteger:
-				json_traits_t::set_uinteger(to, json_traits_t::template get_val<typename json_traits_t::uinteger_type>(from));
+				if constexpr (has_uinteger)
+					json_traits_t::set_uinteger(
+					    to, json_traits_t::template get_val<typename json_traits_t::uinteger_type>(from));
 				break;
 			case string:
 				json_traits_t::set_string(to, alloc, json_traits_t::template get_val<string_type>(from));
