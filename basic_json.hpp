@@ -21,15 +21,25 @@ namespace bizwen
 		explicit constexpr nulljson_t() noexcept = default;
 	};
 
+	struct disable_integer_t
+	{
+		explicit constexpr disable_integer_t() noexcept = default;
+	};
+
+	struct disable_uinteger_t
+	{
+		explicit constexpr disable_uinteger_t() noexcept = default;
+	};
+
 	inline constexpr nulljson_t nulljson{};
 
-	template <typename Node, bool HasInteger = true, bool HasUInteger = true>
+	template <typename Node>
 	class basic_json;
 
-	template <typename Node, bool HasInteger = true, bool HasUInteger = true>
+	template <typename Node>
 	class basic_const_json_slice;
 
-	template <typename Node, bool HasInteger = true, bool HasUInteger = true>
+	template <typename Node>
 	class basic_json_slice;
 
 	enum class json_errc
@@ -147,9 +157,9 @@ namespace bizwen
 			using number_type = std::variant_alternative_t<3uz, variant_type>;
 			static_assert(std::floating_point<number_type>);
 			using integer_type = std::variant_alternative_t<4uz, variant_type>;
-			static_assert(std::signed_integral<integer_type>);
+			static_assert(std::signed_integral<integer_type> || std::is_same_v<integer_type, disable_integer_t>);
 			using uinteger_type = std::variant_alternative_t<5uz, variant_type>;
-			static_assert(std::unsigned_integral<uinteger_type>);
+			static_assert(std::unsigned_integral<uinteger_type> || std::is_same_v<integer_type, disable_uinteger_t>);
 			using raw_string_type = std::variant_alternative_t<6uz, variant_type>;
 
 			template <typename T>
@@ -331,16 +341,40 @@ namespace bizwen
 		concept noncovertible_to_key_char_cptr
 		    = !std::is_convertible_v<KeyStrLike const&, typename Object::key_type::value_type const*>;
 
-		template <typename Slice, typename Var, typename A, bool HasInteger, bool HasUInteger>
+		template <typename Integer, typename UInteger>
+		struct integer_base
+		{
+			static_assert(std::signed_integral<Integer> && std::unsigned_integral<UInteger>);
+			using integer_type = Integer;
+			using uinteger_type = UInteger;
+		};
+
+		template <std::signed_integral Integer>
+		struct integer_base<Integer, disable_uinteger_t>
+		{
+			using integer_type = Integer;
+		};
+
+		template <std::unsigned_integral UInteger>
+		struct integer_base<disable_integer_t, UInteger>
+		{
+			using uinteger_type = UInteger;
+		};
+
+		template <>
+		struct integer_base<disable_integer_t, disable_uinteger_t>
+		{
+		};
+
+		template <typename Slice, typename Var, typename A>
 		class basic_json_slice_common_base
 		{
 			using json_traits_t = json_traits<Var, A>;
+			using integer_type_internal = json_traits_t::integer_type;
+			using uinteger_type_internal = json_traits_t::uinteger_type;
 
 		public:
-			static inline constexpr bool has_integer = HasInteger;
-			static inline constexpr bool has_uinteger = HasUInteger;
-
-			using json_type = basic_json<typename json_traits_t::node_type, HasInteger, HasUInteger>;
+			using json_type = basic_json<typename json_traits_t::node_type>;
 
 			friend Slice;
 			friend json_type;
@@ -351,14 +385,15 @@ namespace bizwen
 			using array_type = json_traits_t::array_type;
 			using string_type = json_traits_t::string_type;
 			using number_type = json_traits_t::number_type;
-			using integer_type = json_traits_t::integer_type;
-			using uinteger_type = json_traits_t::uinteger_type;
 			using char_type = json_traits_t::char_type;
 			using map_node_type = json_traits_t::map_node_type;
 			using allocator_type = json_traits_t::allocator_type;
 			using key_string_type = json_traits_t::key_string_type;
 			using key_char_type = json_traits_t::key_char_type;
 			node_type* node_{}; // made private in derived classes
+
+			static inline constexpr bool has_integer = !std::is_same_v<integer_type_internal, disable_integer_t>;
+			static inline constexpr bool has_uinteger = !std::is_same_v<uinteger_type_internal, disable_uinteger_t>;
 
 		private:
 			constexpr json_kind_t kind() const { return static_cast<Slice const&>(*this).kind(); }
@@ -436,12 +471,29 @@ namespace bizwen
 			{
 				auto k = kind();
 
-				if (k == json_kind_t::number)
-					return get_val<number_type>();
-				else if (k == json_kind_t::integer)
-					return get_val<integer_type>();
-				else if (k == json_kind_t::uinteger)
-					return get_val<uinteger_type>();
+				if constexpr (has_integer && has_uinteger)
+				{
+					if (k == json_kind_t::number)
+						return get_val<number_type>();
+					else if (k == json_kind_t::integer)
+						return get_val<integer_type_internal>();
+					else if (k == json_kind_t::uinteger)
+						return get_val<uinteger_type_internal>();
+				}
+				else if constexpr (has_integer)
+				{
+					if (k == json_kind_t::number)
+						return get_val<number_type>();
+					else if (k == json_kind_t::integer)
+						return get_val<integer_type_internal>();
+				}
+				else if (has_uinteger)
+				{
+					if (k == json_kind_t::number)
+						return get_val<number_type>();
+					else if (k == json_kind_t::uinteger)
+						return get_val<uinteger_type_internal>();
+				}
 
 				throw json_error(json_errc::not_number);
 			}
@@ -478,34 +530,36 @@ namespace bizwen
 				return get_val<object_type>();
 			}
 
-			constexpr explicit operator integer_type() const
+			constexpr explicit operator integer_type_internal() const
 			    requires has_integer
 			{
 				if (!integer())
 					throw json_error(json_errc::not_integer);
 
-				return get_val<integer_type>();
+				return get_val<integer_type_internal>();
 			}
 
-			constexpr explicit operator uinteger_type() const
+			constexpr explicit operator uinteger_type_internal() const
 			    requires has_uinteger
 			{
 				if (!uinteger())
 					throw json_error(json_errc::not_uinteger);
 
-				return get_val<uinteger_type>();
+				return get_val<uinteger_type_internal>();
 			}
 		};
 	}
 
-	template <typename Node, bool HasInteger, bool HasUInteger>
-	class basic_const_json_slice
-	    : public detail::basic_json_slice_common_base<basic_const_json_slice<Node, HasInteger, HasUInteger>,
-	          decltype(Node::stor), decltype(Node::alloc), HasInteger, HasUInteger>
+	template <typename Node>
+	class basic_const_json_slice: public detail::basic_json_slice_common_base<basic_const_json_slice<Node>,
+	                                  decltype(Node::stor), decltype(Node::alloc)>,
+	      public detail::integer_base<
+	          typename detail::json_traits<decltype(Node::stor), decltype(Node::alloc)>::integer_type,
+	          typename detail::json_traits<decltype(Node::stor), decltype(Node::alloc)>::uinteger_type>
 	{
 		using json_traits_t = detail::json_traits<decltype(Node::stor), decltype(Node::alloc)>;
-		using base_type = detail::basic_json_slice_common_base<basic_const_json_slice<Node, HasInteger, HasUInteger>,
-		    decltype(Node::stor), decltype(Node::alloc), HasInteger, HasUInteger>;
+		using base_type = detail::basic_json_slice_common_base<basic_const_json_slice<Node>, decltype(Node::stor),
+		    decltype(Node::alloc)>;
 
 		friend base_type;
 
@@ -544,7 +598,6 @@ namespace bizwen
 		using typename base_type::allocator_type;
 		using typename base_type::array_type;
 		using typename base_type::char_type;
-		using typename base_type::integer_type;
 		using typename base_type::json_type;
 		using typename base_type::key_char_type;
 		using typename base_type::key_string_type;
@@ -553,7 +606,6 @@ namespace bizwen
 		using typename base_type::number_type;
 		using typename base_type::object_type;
 		using typename base_type::string_type;
-		using typename base_type::uinteger_type;
 		using typename base_type::value_type;
 
 		constexpr void swap(basic_const_json_slice& rhs) noexcept
@@ -584,7 +636,7 @@ namespace bizwen
 		{
 		}
 
-		constexpr basic_const_json_slice(basic_json_slice<Node, HasInteger, HasUInteger> const& s) noexcept
+		constexpr basic_const_json_slice(basic_json_slice<Node> const& s) noexcept
 		    : base_type{ s.node_ }
 		{
 		}
@@ -674,16 +726,20 @@ namespace bizwen
 		}
 	};
 
-	template <typename Node, bool HasInteger, bool HasUInteger>
-	class basic_json_slice: public detail::basic_json_slice_common_base<basic_json_slice<Node, HasInteger, HasUInteger>,
-	                            decltype(Node::stor), decltype(Node::alloc), HasInteger, HasUInteger>
+	template <typename Node>
+	class basic_json_slice
+	    : public detail::basic_json_slice_common_base<basic_json_slice<Node>, decltype(Node::stor),
+	          decltype(Node::alloc)>,
+	      public detail::integer_base<
+	          typename detail::json_traits<decltype(Node::stor), decltype(Node::alloc)>::integer_type,
+	          typename detail::json_traits<decltype(Node::stor), decltype(Node::alloc)>::uinteger_type>
 	{
 		using json_traits_t = detail::json_traits<decltype(Node::stor), decltype(Node::alloc)>;
-		using base_type = detail::basic_json_slice_common_base<basic_json_slice<Node, HasInteger, HasUInteger>,
-		    decltype(Node::stor), decltype(Node::alloc), HasInteger, HasUInteger>;
+		using base_type
+		    = detail::basic_json_slice_common_base<basic_json_slice<Node>, decltype(Node::stor), decltype(Node::alloc)>;
 
 		friend base_type;
-		friend basic_const_json_slice<Node, HasInteger, HasUInteger>;
+		friend basic_const_json_slice<Node>;
 
 		// defined in base_type, but base_type can't access its members,
 		// so use the CRTP derived class to provide the actual accessor
@@ -720,7 +776,6 @@ namespace bizwen
 		using typename base_type::allocator_type;
 		using typename base_type::array_type;
 		using typename base_type::char_type;
-		using typename base_type::integer_type;
 		using typename base_type::json_type;
 		using typename base_type::key_char_type;
 		using typename base_type::key_string_type;
@@ -729,7 +784,6 @@ namespace bizwen
 		using typename base_type::number_type;
 		using typename base_type::object_type;
 		using typename base_type::string_type;
-		using typename base_type::uinteger_type;
 		using typename base_type::value_type;
 
 		constexpr void swap(basic_json_slice& rhs) noexcept
@@ -970,7 +1024,7 @@ namespace bizwen
 
 				json_traits_t::set_boolean(node_->stor, n);
 			}
-			else if constexpr (HasInteger && std::signed_integral<T>)
+			else if constexpr (has_integer && std::signed_integral<T>)
 			{
 				auto kd = kind();
 				using enum detail::json_kind_t;
@@ -980,7 +1034,7 @@ namespace bizwen
 
 				json_traits_t::set_integer(node_->stor, n);
 			}
-			else if constexpr (HasUInteger && std::unsigned_integral<T>)
+			else if constexpr (has_uinteger && std::unsigned_integral<T>)
 			{
 				auto kd = kind();
 				using enum detail::json_kind_t;
@@ -1036,8 +1090,11 @@ namespace bizwen
 		}
 	};
 
-	template <typename Node, bool HasInteger, bool HasUInteger>
-	class basic_json
+	template <typename Node>
+	class basic_json:
+	      public detail::integer_base<
+	          typename detail::json_traits<decltype(Node::stor), decltype(Node::alloc)>::integer_type,
+	          typename detail::json_traits<decltype(Node::stor), decltype(Node::alloc)>::uinteger_type>
 	{
 		using json_traits_t = detail::json_traits<decltype(Node::stor), decltype(Node::alloc)>;
 
@@ -1047,15 +1104,10 @@ namespace bizwen
 		static_assert(std::is_same_v<Node, typename json_traits_t::node_type>);
 
 	public:
-		static inline constexpr bool has_integer = HasInteger;
-		static inline constexpr bool has_uinteger = HasUInteger;
-
 		using allocator_type = json_traits_t::allocator_type;
 		using node_type = Node;
 		using value_type = Node;
 		using number_type = json_traits_t::number_type;
-		using integer_type = json_traits_t::integer_type;
-		using uinteger_type = json_traits_t::uinteger_type;
 		using object_type = json_traits_t::object_type;
 		using array_type = json_traits_t::array_type;
 		using string_type = json_traits_t::string_type;
@@ -1064,11 +1116,14 @@ namespace bizwen
 		using key_string_type = object_type::key_type;
 		using key_char_type = key_string_type::value_type;
 
-		using slice_type = basic_json_slice<node_type, HasInteger, HasUInteger>;
-		using const_slice_type = basic_const_json_slice<node_type, HasInteger, HasUInteger>;
+		using slice_type = basic_json_slice<node_type>;
+		using const_slice_type = basic_const_json_slice<node_type>;
 
 		friend const_slice_type;
 		friend slice_type;
+
+		static inline constexpr bool has_integer = !std::is_same_v<typename json_traits_t::integer_type, disable_integer_t>;
+		static inline constexpr bool has_uinteger = !std::is_same_v<typename json_traits_t::uinteger_type, disable_uinteger_t>;
 
 	private:
 		static constexpr bool is_ator_stateless_ = std::allocator_traits<allocator_type>::is_always_equal::value;
@@ -1081,9 +1136,6 @@ namespace bizwen
 		static_assert(std::integral<char_type>);
 		static_assert(std::integral<key_char_type>);
 		static_assert(std::floating_point<number_type>);
-		static_assert(std::signed_integral<integer_type>);
-		static_assert(std::unsigned_integral<uinteger_type>);
-		static_assert(sizeof(integer_type) == sizeof(uinteger_type));
 		static_assert(std::same_as<node_type, typename array_type::value_type>);
 		static_assert(std::same_as<node_type, typename object_type::mapped_type>);
 		static_assert(std::random_access_iterator<typename array_type::iterator>);
@@ -1323,11 +1375,11 @@ namespace bizwen
 			{
 				json_traits_t::set_boolean(node_.stor, n);
 			}
-			else if constexpr (HasInteger && std::signed_integral<T>)
+			else if constexpr (has_integer && std::signed_integral<T>)
 			{
 				json_traits_t::set_integer(node_.stor, n);
 			}
-			else if constexpr (HasUInteger && std::unsigned_integral<T>)
+			else if constexpr (has_uinteger && std::unsigned_integral<T>)
 			{
 				json_traits_t::set_uinteger(node_.stor, n);
 			}
@@ -1566,10 +1618,11 @@ namespace bizwen
 				json_traits_t::set_number(to, json_traits_t::template get_val<number_type>(from));
 				break;
 			case integer:
-				json_traits_t::set_integer(to, json_traits_t::template get_val<integer_type>(from));
+			if constexpr(has_integer)
+				json_traits_t::set_integer(to, json_traits_t::template get_val<typename json_traits_t::integer_type>(from));
 				break;
 			case uinteger:
-				json_traits_t::set_uinteger(to, json_traits_t::template get_val<uinteger_type>(from));
+				json_traits_t::set_uinteger(to, json_traits_t::template get_val<typename json_traits_t::uinteger_type>(from));
 				break;
 			case string:
 				json_traits_t::set_string(to, alloc, json_traits_t::template get_val<string_type>(from));
@@ -1623,13 +1676,13 @@ namespace bizwen
 
 // these class templates have nested allocator_type, but shoudn't be uses-allocator constructed
 
-template <typename Node, bool HasInteger, bool HasUInteger, typename Alloc>
-struct std::uses_allocator<bizwen::basic_json_slice<Node, HasInteger, HasUInteger>, Alloc>: std::false_type
+template <typename Node, typename Alloc>
+struct std::uses_allocator<bizwen::basic_json_slice<Node>, Alloc>: std::false_type
 {
 };
 
-template <typename Node, bool HasInteger, bool HasUInteger, typename Alloc>
-struct std::uses_allocator<bizwen::basic_const_json_slice<Node, HasInteger, HasUInteger>, Alloc>: std::false_type
+template <typename Node, typename Alloc>
+struct std::uses_allocator<bizwen::basic_const_json_slice<Node>, Alloc>: std::false_type
 {
 };
 

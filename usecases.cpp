@@ -14,11 +14,11 @@ class simple_json_node
 	    std::string*, std::vector<simple_json_node>*, std::map<std::string, simple_json_node>*>;
 	using allocator_type = std::allocator<simple_json_node>;
 
-	template <typename, bool, bool>
+	template <typename>
 	friend class bizwen::basic_json;
-	template <typename, bool, bool>
+	template <typename>
 	friend class bizwen::basic_json_slice;
-	template <typename, bool, bool>
+	template <typename>
 	friend class bizwen::basic_const_json_slice;
 
 	simple_json_node() = default;
