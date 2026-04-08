@@ -1558,7 +1558,10 @@ namespace bizwen
 				array_type arr_;
 				for (auto& value : arr)
 				{
-					arr_.reserve(N);
+					if constexpr (requires { arr_.reserve(N); })
+					{
+						arr_.reserve(N);
+					}
 					arr_.push_back(std::move(value));
 				}
 
